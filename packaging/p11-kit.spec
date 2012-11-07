@@ -70,7 +70,7 @@ find %{buildroot}%{_libdir} -name '*.la' -type f -delete -print
 # Package the example conf file as documentation. Like this we're sure that we will
 # not introduce conflicts with this version of the library and future ones.
 %doc p11-kit/pkcs11.conf.example
-%doc AUTHORS ChangeLog COPYING NEWS README
+%doc COPYING
 %dir %{_sysconfdir}/pkcs11
 %dir %{_sysconfdir}/pkcs11/modules/
 %{_libdir}/libp11-kit.so.*
