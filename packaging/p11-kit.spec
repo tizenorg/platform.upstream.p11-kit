@@ -1,5 +1,5 @@
 Name:           p11-kit
-Version:        0.12
+Version:        0.18.4
 Release:        0
 License:        BSD-3-Clause
 Summary:        Library to work with PKCS#11 modules
@@ -8,6 +8,7 @@ Group:          Security/Crypto Libraries
 Source0:        http://p11-glue.freedesktop.org/releases/%{name}-%{version}.tar.gz
 Source99:       baselibs.conf
 BuildRequires:  pkg-config
+BuildRequires:  pkgconfig(libtasn1)
 
 %description
 p11-kit provides a way to load and enumerate PKCS#11 modules, as well
@@ -16,7 +17,6 @@ such a way that they're discoverable.
 
 %package -n libp11-kit
 Summary:        Library to work with PKCS#11 modules
-Group:          Security/Crypto Libraries
 
 %description -n libp11-kit
 p11-kit provides a way to load and enumerate PKCS#11 modules, as well
@@ -25,7 +25,6 @@ such a way that they're discoverable.
 
 %package tools
 Summary:        Library to work with PKCS#11 modules -- Tools
-Group:          Security/Crypto Libraries
 
 %description tools
 p11-kit provides a way to load and enumerate PKCS#11 modules, as well
@@ -34,7 +33,6 @@ such a way that they're discoverable.
 
 %package devel
 Summary:        Library to work with PKCS#11 modules -- Development Files
-Group:          Development/Libraries
 Requires:       libp11-kit = %{version}
 
 %description devel
@@ -46,7 +44,7 @@ such a way that they're discoverable.
 %setup -q
 
 %build
-%configure
+%configure --without-trust-paths
 make %{?_smp_mflags}
 
 %install
@@ -58,7 +56,6 @@ install -d %{buildroot}%{_sysconfdir}/pkcs11/modules
 # with future versions of the library on file level. As replacement, we package
 # the file as documentation file.
 rm %{buildroot}%{_sysconfdir}/pkcs11/pkcs11.conf.example
-find %{buildroot}%{_libdir} -name '*.la' -type f -delete -print
 
 %post -n libp11-kit -p /sbin/ldconfig
 
@@ -74,6 +71,13 @@ find %{buildroot}%{_libdir} -name '*.la' -type f -delete -print
 %dir %{_sysconfdir}/pkcs11/modules/
 %{_libdir}/libp11-kit.so.*
 %{_libdir}/p11-kit-proxy.so
+%dir %{_libdir}/pkcs11
+%dir %{_libdir}/p11-kit
+%{_libdir}/pkcs11/p11-kit-trust.so
+%{_libdir}/p11-kit/p11-kit-extract-trust
+%dir %_datadir/p11-kit
+%dir %_datadir/p11-kit/modules
+%_datadir/p11-kit/modules/p11-kit-trust.module
 
 %files tools
 %defattr(-,root,root)
