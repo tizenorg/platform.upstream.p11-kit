@@ -34,15 +34,16 @@
 
 #include "config.h"
 
-#define DEBUG_FLAG DEBUG_PIN
+#define P11_DEBUG_FLAG P11_DEBUG_PIN
 #include "debug.h"
-#include "hashmap.h"
+#include "dict.h"
+#include "library.h"
+#include "message.h"
 #include "pkcs11.h"
 #include "p11-kit.h"
 #include "pin.h"
 #include "private.h"
-#include "ptr-array.h"
-#include "util.h"
+#include "array.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -57,7 +58,7 @@
  * @short_description: PIN Callbacks
  *
  * Applications can register a callback which will be called to provide a
- * password associated with a given pin file.
+ * password associated with a given pin source.
  *
  * PKCS\#11 URIs can contain a 'pin-source' attribute. The value of this attribute
  * is application dependent, but often references a file containing a PIN to
@@ -127,8 +128,7 @@
  * P11_KIT_PIN_FALLBACK:
  *
  * Used with p11_kit_pin_register_callback() to register a fallback callback.
- * This callback will be called if no other
- * String of URI scheme for PKCS\#11 URIs.
+ * This callback will be called if no other callback is registered for a 'pin-source'.
  */
 
 typedef struct _PinCallback {
@@ -146,7 +146,7 @@ typedef struct _PinCallback {
  * we can audit thread safety easier.
  */
 static struct _Shared {
-	hashmap *pin_sources;
+	p11_dict *pin_sources;
 } gl = { NULL };
 
 static void*
@@ -171,6 +171,40 @@ unref_pin_callback (void *pointer)
 	}
 }
 
+static bool
+register_callback_unlocked (const char *pin_source,
+                            PinCallback *cb)
+{
+	p11_array *callbacks = NULL;
+	char *name;
+
+	name = strdup (pin_source);
+	return_val_if_fail (name != NULL, false);
+
+	if (gl.pin_sources == NULL) {
+		gl.pin_sources = p11_dict_new (p11_dict_str_hash, p11_dict_str_equal,
+		                               free, (p11_destroyer)p11_array_free);
+		return_val_if_fail (gl.pin_sources != NULL, false);
+	}
+
+	if (gl.pin_sources != NULL)
+		callbacks = p11_dict_get (gl.pin_sources, name);
+
+	if (callbacks == NULL) {
+		callbacks = p11_array_new (unref_pin_callback);
+		return_val_if_fail (callbacks != NULL, false);
+		if (!p11_dict_set (gl.pin_sources, name, callbacks))
+			return_val_if_reached (false);
+		name = NULL;
+	}
+
+	if (!p11_array_push (callbacks, cb))
+		return_val_if_reached (false);
+
+	free (name);
+	return true;
+}
+
 /**
  * p11_kit_pin_register_callback:
  * @pin_source: the 'pin-source' attribute this this callback is for
@@ -187,84 +221,35 @@ unref_pin_callback (void *pointer)
  * If multiple callbacks are registered for the same @pin_source value, then
  * the last registered callback will be the first to be called.
  *
- * Returns: Returns negative if registering fails. This can only happen if
- *     memory cannot be allocated.
+ * Returns: Returns negative if registering fails.
  */
 int
-p11_kit_pin_register_callback (const char *pin_source, p11_kit_pin_callback callback,
-                               void *callback_data, p11_kit_pin_destroy_func callback_destroy)
+p11_kit_pin_register_callback (const char *pin_source,
+                               p11_kit_pin_callback callback,
+                               void *callback_data,
+                               p11_kit_pin_destroy_func callback_destroy)
 {
-	ptr_array_t *callbacks = NULL;
 	PinCallback *cb;
-	char *name;
-	int ret;
+	bool ret;
+
+	return_val_if_fail (pin_source != NULL, -1);
+	return_val_if_fail (callback != NULL, -1);
 
 	cb = calloc (1, sizeof (PinCallback));
-	if (cb == NULL) {
-		errno = ENOMEM;
-		return -1;
-	}
-
-	name = strdup (pin_source);
-	if (name == NULL) {
-		free (cb);
-		errno = ENOMEM;
-		return -1;
-	}
+	return_val_if_fail (cb != NULL, -1);
 
 	cb->refs = 1;
 	cb->func = callback;
 	cb->user_data = callback_data;
 	cb->destroy = callback_destroy;
 
-	_p11_lock ();
+	p11_lock ();
 
-		if (gl.pin_sources == NULL) {
-			gl.pin_sources = _p11_hash_create (_p11_hash_string_hash, _p11_hash_string_equal,
-			                                   free, (hash_destroy_func)_p11_ptr_array_free);
-			if (gl.pin_sources == NULL) {
-				errno = ENOMEM;
-				ret = -1;
-			}
-		}
+	ret = register_callback_unlocked (pin_source, cb);
 
-		if (gl.pin_sources != NULL)
-			callbacks = _p11_hash_get (gl.pin_sources, pin_source);
+	p11_unlock ();
 
-		if (callbacks == NULL) {
-			callbacks = _p11_ptr_array_create (unref_pin_callback);
-			if (callbacks == NULL) {
-				errno = ENOMEM;
-				ret = -1;
-			} else if (!_p11_hash_set (gl.pin_sources, name, callbacks)) {
-				_p11_ptr_array_free (callbacks);
-				callbacks = NULL;
-				errno = ENOMEM;
-				ret = -1;
-			} else {
-				/* Note that we've consumed the name */
-				name = NULL;
-			}
-		}
-
-		if (callbacks != NULL) {
-			if (_p11_ptr_array_add (callbacks, cb) < 0) {
-				errno = ENOMEM;
-				ret = -1;
-			} else {
-				/* Note that we've consumed the callback */
-				cb = NULL;
-			}
-		}
-
-	_p11_unlock ();
-
-	/* Unless consumed above */
-	free (name);
-	if (cb != NULL)
-		unref_pin_callback (cb);
-
-	return ret;
+	return ret ? 0 : -1;
 }
 
 /**
@@ -279,38 +264,42 @@ p11_kit_pin_register_callback (const char *pin_source, p11_kit_pin_callback call
  * removed.
  */
 void
-p11_kit_pin_unregister_callback (const char *pin_source, p11_kit_pin_callback callback,
+p11_kit_pin_unregister_callback (const char *pin_source,
+                                 p11_kit_pin_callback callback,
                                  void *callback_data)
 {
 	PinCallback *cb;
-	ptr_array_t *callbacks;
+	p11_array *callbacks;
 	unsigned int i;
 
-	_p11_lock ();
+	return_if_fail (pin_source != NULL);
+	return_if_fail (callback != NULL);
+
+	p11_lock ();
 
 		if (gl.pin_sources) {
-			callbacks = _p11_hash_get (gl.pin_sources, pin_source);
+			callbacks = p11_dict_get (gl.pin_sources, pin_source);
 			if (callbacks) {
-				for (i = 0; i < _p11_ptr_array_count (callbacks); i++) {
-					cb = _p11_ptr_array_at (callbacks, i);
+				for (i = 0; i < callbacks->num; i++) {
+					cb = callbacks->elem[i];
 					if (cb->func == callback && cb->user_data == callback_data) {
-						_p11_ptr_array_remove (callbacks, i);
+						p11_array_remove (callbacks, i);
 						break;
 					}
 				}
 
-				if (_p11_ptr_array_count (callbacks) == 0)
-					_p11_hash_remove (gl.pin_sources, pin_source);
+				if (callbacks->num == 0)
+					p11_dict_remove (gl.pin_sources, pin_source);
 			}
 
 			/* When there are no more pin sources, get rid of the hash table */
-			if (_p11_hash_size (gl.pin_sources) == 0) {
-				_p11_hash_free (gl.pin_sources);
+			if (p11_dict_size (gl.pin_sources) == 0) {
+				p11_dict_free (gl.pin_sources);
 				gl.pin_sources = NULL;
 			}
 		}
 
-	_p11_unlock ();
+	p11_unlock ();
 }
 
 /**
@@ -344,35 +333,39 @@ p11_kit_pin_unregister_callback (const char *pin_source, p11_kit_pin_callback ca
  * Returns: the PIN which should be released with p11_kit_pin_unref(), or %NULL
  *     if no callback was registered or could proivde a PIN
  */
-P11KitPin*
-p11_kit_pin_request (const char *pin_source, P11KitUri *pin_uri,
-                     const char *pin_description, P11KitPinFlags pin_flags)
+P11KitPin *
+p11_kit_pin_request (const char *pin_source,
+                     P11KitUri *pin_uri,
+                     const char *pin_description,
+                     P11KitPinFlags pin_flags)
 {
 	PinCallback **snapshot = NULL;
 	unsigned int snapshot_count = 0;
-	ptr_array_t *callbacks;
+	p11_array *callbacks;
 	P11KitPin *pin;
 	unsigned int i;
 
-	_p11_lock ();
+	return_val_if_fail (pin_source != NULL, NULL);
+
+	p11_lock ();
 
 		/* Find and ref the pin source data */
 		if (gl.pin_sources) {
-			callbacks = _p11_hash_get (gl.pin_sources, pin_source);
+			callbacks = p11_dict_get (gl.pin_sources, pin_source);
 
 			/* If we didn't find any snapshots try the global ones */
 			if (callbacks == NULL)
-				callbacks = _p11_hash_get (gl.pin_sources, P11_KIT_PIN_FALLBACK);
+				callbacks = p11_dict_get (gl.pin_sources, P11_KIT_PIN_FALLBACK);
 
 			if (callbacks != NULL) {
-				snapshot = (PinCallback**)_p11_ptr_array_snapshot (callbacks);
-				snapshot_count = _p11_ptr_array_count (callbacks);
-				for (i = 0; i < snapshot_count; i++)
+				snapshot = memdup (callbacks->elem, sizeof (void *) * callbacks->num);
+				snapshot_count = callbacks->num;
+				for (i = 0; snapshot && i < snapshot_count; i++)
 					ref_pin_callback (snapshot[i]);
 			}
 		}
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	if (snapshot == NULL)
 		return NULL;
@@ -382,11 +375,11 @@ p11_kit_pin_request (const char *pin_source, P11KitUri *pin_uri,
 		                               snapshot[i - 1]->user_data);
 	}
 
-	_p11_lock ();
+	p11_lock ();
 		for (i = 0; i < snapshot_count; i++)
 			unref_pin_callback (snapshot[i]);
 		free (snapshot);
-	_p11_unlock ();
+	p11_unlock ();
 
 	return pin;
 }
@@ -433,35 +426,47 @@ p11_kit_pin_request (const char *pin_source, P11KitUri *pin_uri,
  * a file with that name. This can be used to enable the normal PKCS\#11 URI
  * behavior described in the RFC.
  *
- * This callback is not registered by default. To register it use code like
- * the following:
+ * If @pin_flags contains the %P11_KIT_PIN_FLAGS_RETRY flag, then this
+ * callback will always return %NULL. This is to prevent endless loops
+ * where an application is expecting to interact with a prompter, but
+ * instead is interacting with this callback reading a file over and over.
+ *
+ * This callback fails on files larger than 4 Kilobytes.
+ *
+ * This callback is not registered by default. It may have security
+ * implications depending on the source of the PKCS\#11 URI and the PKCS\#11
+ * in use. To register it, use code like the following:
  *
  * <informalexample><programlisting>
  * p11_kit_pin_register_callback (P11_KIT_PIN_FALLBACK, p11_kit_pin_file_callback,
  *                                NULL, NULL);
  * </programlisting></informalexample>
  *
- * Returns: A referenced PIN with the pinfile contents, or %NULL if the file
- *    could not be read.
+ * Returns: a referenced PIN with the file contents, or %NULL if the file
+ *          could not be read
  */
-P11KitPin*
+P11KitPin *
 p11_kit_pin_file_callback (const char *pin_source,
                            P11KitUri *pin_uri,
                            const char *pin_description,
                            P11KitPinFlags pin_flags,
                            void *callback_data)
 {
+	const size_t block = 1024;
 	unsigned char *buffer;
+	unsigned char *memory;
 	size_t used, allocated;
 	int error = 0;
 	int fd;
 	int res;
 
+	return_val_if_fail (pin_source != NULL, NULL);
+
 	/* We don't support retries */
 	if (pin_flags & P11_KIT_PIN_FLAGS_RETRY)
 		return NULL;
 
-	fd = open (pin_source, O_RDONLY);
+	fd = open (pin_source, O_BINARY | O_RDONLY);
 	if (fd == -1)
 		return NULL;
 
@@ -470,22 +475,24 @@ p11_kit_pin_file_callback (const char *pin_source,
 	allocated = 0;
 
 	for (;;) {
-		if (used + 256 > allocated) {
-			buffer = _p11_realloc (buffer, used + 1024);
-			if (buffer == NULL) {
+		if (used + block > 4096) {
+			error = EFBIG;
+			break;
+		}
+		if (used + block > allocated) {
+			memory = realloc (buffer, used + block);
+			if (memory == NULL) {
 				error = ENOMEM;
 				break;
 			}
-			allocated = used + 1024;
+			buffer = memory;
+			allocated = used + block;
 		}
 
 		res = read (fd, buffer + used, allocated - used);
 		if (res < 0) {
 			if (errno == EAGAIN)
 				continue;
-			error = errno;
-			free (buffer);
-			buffer = NULL;
 			error = errno;
 			break;
 		} else if (res == 0) {
@@ -495,7 +502,10 @@ p11_kit_pin_file_callback (const char *pin_source,
 		}
 	}
 
-	if (buffer == NULL) {
+	close (fd);
+
+	if (error != 0) {
+		free (buffer);
 		errno = error;
 		return NULL;
 	}
@@ -521,29 +531,28 @@ struct p11_kit_pin {
  * @value: the value of the PIN
  * @length: the length of @value
  *
- * Create a new P11KitPin with the given PIN value. The exactly @length bytes
- * from @value are used. Null terminated strings, or encodings are not
- * considered.
+ * Create a new P11KitPin with the given PIN value. This function is
+ * usually used from within registered PIN callbacks.
  *
- * A copy of the @value will be made.
+ * Exactly @length bytes from @value are used. Null terminated strings,
+ * or encodings are not considered. A copy of the @value will be made.
  *
  * Returns: The newly allocated P11KitPin, which should be freed with
- *     p11_kit_pin_unref() when no longer needed.
+ *          p11_kit_pin_unref() when no longer needed.
  */
-P11KitPin*
+P11KitPin *
 p11_kit_pin_new (const unsigned char *value, size_t length)
 {
 	unsigned char *copy;
 	P11KitPin *pin;
 
 	copy = malloc (length);
-	if (copy == NULL)
-		return NULL;
+	return_val_if_fail (copy != NULL, NULL);
 
 	memcpy (copy, value, length);
 	pin = p11_kit_pin_new_for_buffer (copy, length, free);
-	if (pin == NULL)
-		free (copy);
+	return_val_if_fail (pin != NULL, NULL);
+
 	return pin;
 }
 
@@ -552,15 +561,16 @@ p11_kit_pin_new (const unsigned char *value, size_t length)
  * @value: the value of the PIN
  *
  * Create a new P11KitPin for the given null-terminated string, such as a
- * password. The PIN will consist of the string not including the null terminator.
- * String encoding is not considered.
+ * password. This function is usually used from within registered
+ * PIN callbacks.
  *
- * A copy of the @value will be made.
+ * The PIN will consist of the string not including the null terminator.
+ * String encoding is not considered. A copy of the @value will be made.
  *
  * Returns: The newly allocated P11KitPin, which should be freed with
  *     p11_kit_pin_unref() when no longer needed.
  */
-P11KitPin*
+P11KitPin *
 p11_kit_pin_new_for_string (const char *value)
 {
 	return p11_kit_pin_new ((const unsigned char *)value, strlen (value));
@@ -572,8 +582,11 @@ p11_kit_pin_new_for_string (const char *value)
  * @length: the length of @buffer
  * @destroy: if not %NULL, then called when PIN is destroyed.
  *
- * Create a new P11KitPin which will use @buffer for the PIN value. The buffer
- * will not be copied. String encodings and null characters are not considered.
+ * Create a new P11KitPin which will use @buffer for the PIN value.
+ * This function is usually used from within registered PIN callbacks.
+ *
+ * The buffer will not be copied. String encodings and null characters
+ * are not considered.
  *
  * When the last reference to this PIN is lost, then the @destroy callback
  * function will be called passing @buffer as an argument. This allows the
@@ -587,17 +600,16 @@ p11_kit_pin_new_for_string (const char *value)
  * </programlisting></informalexample>
  *
  * Returns: The newly allocated P11KitPin, which should be freed with
- *     p11_kit_pin_unref() when no longer needed.
+ *          p11_kit_pin_unref() when no longer needed.
  */
-P11KitPin*
+P11KitPin *
 p11_kit_pin_new_for_buffer (unsigned char *buffer, size_t length,
                             p11_kit_pin_destroy_func destroy)
 {
 	P11KitPin *pin;
 
 	pin = calloc (1, sizeof (P11KitPin));
-	if (pin == NULL)
-		return NULL;
+	return_val_if_fail (pin != NULL, NULL);
 
 	pin->ref_count = 1;
 	pin->buffer = buffer;
@@ -621,7 +633,7 @@ p11_kit_pin_new_for_buffer (unsigned char *buffer, size_t length,
  *
  * Returns: the value for the PIN.
  */
-const unsigned char*
+const unsigned char *
 p11_kit_pin_get_value (P11KitPin *pin, size_t *length)
 {
 	if (length)
@@ -653,14 +665,14 @@ p11_kit_pin_get_length (P11KitPin *pin)
  *
  * Returns: the @pin pointer, for convenience sake.
  */
-P11KitPin*
+P11KitPin *
 p11_kit_pin_ref (P11KitPin *pin)
 {
-	_p11_lock ();
+	p11_lock ();
 
 		pin->ref_count++;
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	return pin;
 }
@@ -675,14 +687,14 @@ p11_kit_pin_ref (P11KitPin *pin)
 void
 p11_kit_pin_unref (P11KitPin *pin)
 {
-	int last = 0;
+	bool last = false;
 
-	_p11_lock ();
+	p11_lock ();
 
 		last = (pin->ref_count == 1);
 		pin->ref_count--;
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	if (last) {
 		if (pin->destroy)

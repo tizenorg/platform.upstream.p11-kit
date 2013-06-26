@@ -35,14 +35,15 @@
 
 #include "config.h"
 
-#define DEBUG_FLAG DEBUG_PROXY
+#define P11_DEBUG_FLAG P11_DEBUG_PROXY
 #include "debug.h"
-#include "hashmap.h"
+#include "dict.h"
+#include "library.h"
+#include "message.h"
 #define CRYPTOKI_EXPORTS
 #include "pkcs11.h"
 #include "p11-kit.h"
 #include "private.h"
-#include "util.h"
 
 #include <sys/types.h>
 #include <assert.h>
@@ -69,9 +70,6 @@ typedef struct _Session {
 	CK_SLOT_ID wrap_slot;
 } Session;
 
-/* Forward declaration */
-static CK_FUNCTION_LIST proxy_function_list;
-
 /*
  * Shared data between threads, protected by the mutex, a structure so
  * we can audit thread safety easier.
@@ -80,7 +78,7 @@ static struct _Shared {
 	Mapping *mappings;
 	unsigned int n_mappings;
 	int mappings_refs;
-	hashmap *sessions;
+	p11_dict *sessions;
 	CK_ULONG last_handle;
 } gl = { NULL, 0, 0, NULL, FIRST_HANDLE };
 
@@ -118,7 +116,7 @@ map_slot_to_real (CK_SLOT_ID_PTR slot, Mapping *mapping)
 
 	assert (mapping);
 
-	_p11_lock ();
+	p11_lock ();
 
 		if (!gl.mappings)
 			rv = CKR_CRYPTOKI_NOT_INITIALIZED;
@@ -127,7 +125,7 @@ map_slot_to_real (CK_SLOT_ID_PTR slot, Mapping *mapping)
 		if (rv == CKR_OK)
 			*slot = mapping->real_slot;
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	return rv;
 }
@@ -141,13 +139,13 @@ map_session_to_real (CK_SESSION_HANDLE_PTR handle, Mapping *mapping, Session *se
 	assert (handle);
 	assert (mapping);
 
-	_p11_lock ();
+	p11_lock ();
 
 		if (!gl.sessions) {
 			rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 		} else {
 			assert (gl.sessions);
-			sess = _p11_hash_get (gl.sessions, handle);
+			sess = p11_dict_get (gl.sessions, handle);
 			if (sess != NULL) {
 				*handle = sess->real_session;
 				rv = map_slot_unlocked (sess->wrap_slot, mapping);
@@ -158,7 +156,7 @@ map_session_to_real (CK_SESSION_HANDLE_PTR handle, Mapping *mapping, Session *se
 			}
 		}
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	return rv;
 }
@@ -177,7 +175,7 @@ finalize_mappings_unlocked (void)
 	gl.n_mappings = 0;
 
 	/* no more sessions */
-	_p11_hash_free (gl.sessions);
+	p11_dict_free (gl.sessions);
 	gl.sessions = NULL;
 }
 
@@ -190,13 +188,13 @@ _p11_kit_proxy_after_fork (void)
 	 * up any mappings and all
 	 */
 
-	_p11_lock ();
+	p11_lock ();
 
 		gl.mappings_refs = 1;
 		finalize_mappings_unlocked ();
 		assert (!gl.mappings);
 
-	_p11_unlock ();
+	p11_unlock ();
 }
 
 static CK_RV
@@ -204,7 +202,7 @@ proxy_C_Finalize (CK_VOID_PTR reserved)
 {
 	CK_RV rv;
 
-	_p11_debug ("in");
+	p11_debug ("in");
 
 	/* WARNING: This function must be reentrant */
 
@@ -212,7 +210,7 @@ proxy_C_Finalize (CK_VOID_PTR reserved)
 		rv = CKR_ARGUMENTS_BAD;
 
 	} else {
-		_p11_lock ();
+		p11_lock ();
 
 			/* WARNING: Reentrancy can occur here */
 			rv = _p11_kit_finalize_registered_unlocked_reentrant ();
@@ -224,10 +222,10 @@ proxy_C_Finalize (CK_VOID_PTR reserved)
 			if (gl.mappings_refs)
 				finalize_mappings_unlocked ();
 
-		_p11_unlock ();
+		p11_unlock ();
 	}
 
-	_p11_debug ("out: %lu", rv);
+	p11_debug ("out: %lu", rv);
 	return rv;
 }
 
@@ -251,31 +249,26 @@ initialize_mappings_unlocked_reentrant (void)
 		assert (funcs);
 		slots = NULL;
 
-		_p11_unlock ();
+		p11_unlock ();
 
 			/* Ask module for its slots */
 			rv = (funcs->C_GetSlotList) (FALSE, NULL, &count);
 			if (rv == CKR_OK && count) {
 				slots = calloc (sizeof (CK_SLOT_ID), count);
-				if (!slots)
-					rv = CKR_HOST_MEMORY;
-				else
-					rv = (funcs->C_GetSlotList) (FALSE, slots, &count);
+				rv = (funcs->C_GetSlotList) (FALSE, slots, &count);
 			}
 
-		_p11_lock ();
+		p11_lock ();
 
 		if (rv != CKR_OK) {
 			free (slots);
 			break;
 		}
 
-		mappings = _p11_realloc (mappings, sizeof (Mapping) * (n_mappings + count));
-		if (!mappings) {
-			free (slots);
-			rv = CKR_HOST_MEMORY;
-			break;
-		}
+		return_val_if_fail (count == 0 || slots != NULL, CKR_GENERAL_ERROR);
+
+		mappings = realloc (mappings, sizeof (Mapping) * (n_mappings + count));
+		return_val_if_fail (mappings != NULL, CKR_HOST_MEMORY);
 
 		/* And now add a mapping for each of those slots */
 		for (i = 0; i < count; ++i) {
@@ -288,6 +281,8 @@ initialize_mappings_unlocked_reentrant (void)
 		free (slots);
 	}
 
+	free (funcss);
+
 	/* Another thread raced us here due to above reentrancy */
 	if (gl.mappings) {
 		free (mappings);
@@ -297,7 +292,7 @@ initialize_mappings_unlocked_reentrant (void)
 	assert (!gl.sessions);
 	gl.mappings = mappings;
 	gl.n_mappings = n_mappings;
-	gl.sessions = _p11_hash_create (_p11_hash_ulongptr_hash, _p11_hash_ulongptr_equal, NULL, free);
+	gl.sessions = p11_dict_new (p11_dict_ulongptr_hash, p11_dict_ulongptr_equal, NULL, free);
 	++gl.mappings_refs;
 
 	/* Any cleanup necessary for failure will happen at caller */
@@ -309,13 +304,13 @@ proxy_C_Initialize (CK_VOID_PTR init_args)
 {
 	CK_RV rv;
 
-	_p11_library_init_once ();
+	p11_library_init_once ();
 
 	/* WARNING: This function must be reentrant */
 
-	_p11_debug ("in");
+	p11_debug ("in");
 
-	_p11_lock ();
+	p11_lock ();
 
 		/* WARNING: Reentrancy can occur here */
 		rv = _p11_kit_initialize_registered_unlocked_reentrant ();
@@ -324,14 +319,14 @@ proxy_C_Initialize (CK_VOID_PTR init_args)
 		if (rv == CKR_OK && gl.mappings_refs == 0)
 			rv = initialize_mappings_unlocked_reentrant ();
 
-	_p11_unlock ();
+	p11_unlock ();
 
-	_p11_debug ("here");
+	p11_debug ("here");
 
 	if (rv != CKR_OK)
 		proxy_C_Finalize (NULL);
 
-	_p11_debug ("out: %lu", rv);
+	p11_debug ("out: %lu", rv);
 	return rv;
 }
 
@@ -340,17 +335,16 @@ proxy_C_GetInfo (CK_INFO_PTR info)
 {
 	CK_RV rv = CKR_OK;
 
-	_p11_library_init_once ();
+	p11_library_init_once ();
 
-	if (info == NULL)
-		return CKR_ARGUMENTS_BAD;
+	return_val_if_fail (info != NULL, CKR_ARGUMENTS_BAD);
 
-	_p11_lock ();
+	p11_lock ();
 
 		if (!gl.mappings)
 			rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	if (rv != CKR_OK)
 		return rv;
@@ -370,9 +364,8 @@ proxy_C_GetFunctionList (CK_FUNCTION_LIST_PTR_PTR list)
 {
 	/* Can be called before C_Initialize */
 
-	if (!list)
-		return CKR_ARGUMENTS_BAD;
-	*list = &proxy_function_list;
+	return_val_if_fail (list != NULL, CKR_ARGUMENTS_BAD);
+	*list = &_p11_proxy_function_list;
 	return CKR_OK;
 }
 
@@ -386,10 +379,9 @@ proxy_C_GetSlotList (CK_BBOOL token_present, CK_SLOT_ID_PTR slot_list,
 	CK_RV rv = CKR_OK;
 	int i;
 
-	if (!count)
-		return CKR_ARGUMENTS_BAD;
+	return_val_if_fail (count != NULL, CKR_ARGUMENTS_BAD);
 
-	_p11_lock ();
+	p11_lock ();
 
 		if (!gl.mappings) {
 			rv = CKR_CRYPTOKI_NOT_INITIALIZED;
@@ -422,7 +414,7 @@ proxy_C_GetSlotList (CK_BBOOL token_present, CK_SLOT_ID_PTR slot_list,
 			*count = index;
 		}
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	return rv;
 }
@@ -503,8 +495,7 @@ proxy_C_OpenSession (CK_SLOT_ID id, CK_FLAGS flags, CK_VOID_PTR user_data,
 	Mapping map;
 	CK_RV rv;
 
-	if (handle == NULL)
-		return CKR_ARGUMENTS_BAD;
+	return_val_if_fail (handle != NULL, CKR_ARGUMENTS_BAD);
 
 	rv = map_slot_to_real (&id, &map);
 	if (rv != CKR_OK)
@@ -513,7 +504,7 @@ proxy_C_OpenSession (CK_SLOT_ID id, CK_FLAGS flags, CK_VOID_PTR user_data,
 	rv = (map.funcs->C_OpenSession) (id, flags, user_data, callback, handle);
 
 	if (rv == CKR_OK) {
-		_p11_lock ();
+		p11_lock ();
 
 			if (!gl.sessions) {
 				/*
@@ -529,11 +520,11 @@ proxy_C_OpenSession (CK_SLOT_ID id, CK_FLAGS flags, CK_VOID_PTR user_data,
 				sess->wrap_slot = map.wrap_slot;
 				sess->real_session = *handle;
 				sess->wrap_session = ++gl.last_handle; /* TODO: Handle wrapping, and then collisions */
-				_p11_hash_set (gl.sessions, &sess->wrap_session, sess);
+				p11_dict_set (gl.sessions, &sess->wrap_session, sess);
 				*handle = sess->wrap_session;
 			}
 
-		_p11_unlock ();
+		p11_unlock ();
 	}
 
 	return rv;
@@ -553,12 +544,12 @@ proxy_C_CloseSession (CK_SESSION_HANDLE handle)
 	rv = (map.funcs->C_CloseSession) (handle);
 
 	if (rv == CKR_OK) {
-		_p11_lock ();
+		p11_lock ();
 
 			if (gl.sessions)
-				_p11_hash_remove (gl.sessions, &key);
+				p11_dict_remove (gl.sessions, &key);
 
-		_p11_unlock ();
+		p11_unlock ();
 	}
 
 	return rv;
@@ -571,27 +562,27 @@ proxy_C_CloseAllSessions (CK_SLOT_ID id)
 	CK_RV rv = CKR_OK;
 	Session *sess;
 	CK_ULONG i, count = 0;
-	hashiter iter;
+	p11_dictiter iter;
 
-	_p11_lock ();
+	p11_lock ();
 
 		if (!gl.sessions) {
 			rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 		} else {
-			to_close = calloc (sizeof (CK_SESSION_HANDLE), _p11_hash_size (gl.sessions));
+			to_close = calloc (sizeof (CK_SESSION_HANDLE), p11_dict_size (gl.sessions));
 			if (!to_close) {
 				rv = CKR_HOST_MEMORY;
 			} else {
-				_p11_hash_iterate (gl.sessions, &iter);
+				p11_dict_iterate (gl.sessions, &iter);
 				count = 0;
-				while (_p11_hash_next (&iter, NULL, (void**)&sess)) {
+				while (p11_dict_next (&iter, NULL, (void**)&sess)) {
 					if (sess->wrap_slot == id && to_close)
 						to_close[count++] = sess->wrap_session;
 				}
 			}
 		}
 
-	_p11_unlock ();
+	p11_unlock ();
 
 	if (rv != CKR_OK)
 		return rv;
@@ -1321,7 +1312,7 @@ proxy_C_GenerateRandom (CK_SESSION_HANDLE handle, CK_BYTE_PTR random_data,
  * MODULE ENTRY POINT
  */
 
-static CK_FUNCTION_LIST proxy_function_list = {
+CK_FUNCTION_LIST _p11_proxy_function_list = {
 	{ CRYPTOKI_VERSION_MAJOR, CRYPTOKI_VERSION_MINOR },  /* version */
 	proxy_C_Initialize,
 	proxy_C_Finalize,
@@ -1400,6 +1391,6 @@ __declspec(dllexport)
 CK_RV
 C_GetFunctionList (CK_FUNCTION_LIST_PTR_PTR list)
 {
-	_p11_library_init_once ();
+	p11_library_init_once ();
 	return proxy_C_GetFunctionList (list);
 }

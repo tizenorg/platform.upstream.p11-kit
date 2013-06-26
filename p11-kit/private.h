@@ -35,46 +35,10 @@
 #ifndef __P11_KIT_PRIVATE_H__
 #define __P11_KIT_PRIVATE_H__
 
-#include "pkcs11.h"
 #include "compat.h"
+#include "pkcs11.h"
 
-extern mutex_t _p11_mutex;
-
-#define P11_MAX_MESSAGE 512
-
-typedef struct {
-	char message[P11_MAX_MESSAGE];
-#ifdef OS_WIN32
-	void *last_error;
-#endif
-} p11_local;
-
-#define       _p11_lock()    _p11_mutex_lock (&_p11_mutex);
-
-#define       _p11_unlock()  _p11_mutex_unlock (&_p11_mutex);
-
-void          _p11_message                                      (const char* msg, ...);
-
-p11_local *   _p11_library_get_thread_local                     (void);
-
-#ifdef OS_WIN32
-
-/* No implementation, because done by DllMain */
-#define     _p11_library_init_once()
-
-#else /* !OS_WIN32 */
-
-extern pthread_once_t _p11_once;
-
-#define     _p11_library_init_once() \
-	pthread_once (&_p11_once, _p11_library_init);
-
-#endif /* !OS_WIN32 */
-
-
-void        _p11_library_init                                   (void);
-
-void        _p11_library_uninit                                 (void);
+extern CK_FUNCTION_LIST _p11_proxy_function_list;
 
 CK_FUNCTION_LIST_PTR_PTR   _p11_kit_registered_modules_unlocked (void);
 
@@ -88,8 +52,16 @@ CK_RV       _p11_load_config_files_unlocked                     (const char *sys
                                                                  const char *user_conf,
                                                                  int *user_mode);
 
-void        _p11_kit_clear_message                              (void);
-
 void        _p11_kit_default_message                            (CK_RV rv);
+
+const char * _p11_get_progname_unlocked                         (void);
+
+void        _p11_set_progname_unlocked                          (const char *progname);
+
+int          p11_match_uri_module_info                          (CK_INFO_PTR one,
+                                                                 CK_INFO_PTR two);
+
+int          p11_match_uri_token_info                           (CK_TOKEN_INFO_PTR one,
+                                                                 CK_TOKEN_INFO_PTR two);
 
 #endif /* __P11_KIT_PRIVATE_H__ */

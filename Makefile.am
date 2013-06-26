@@ -1,15 +1,28 @@
 
+include $(top_srcdir)/build/Makefile.decl
+
+WEBHOST = anarchy.freedesktop.org
+WEBBASE = /srv/p11-glue.freedesktop.org/www
+
+if WITH_TRUST_MODULE
+TRUST_DIR = trust
+else
+TRUST_DIR =
+endif
+
 SUBDIRS = \
+	build \
+	common \
 	p11-kit \
+	$(TRUST_DIR) \
 	tools \
-	tests \
 	doc \
 	po
 
-ACLOCAL_AMFLAGS = -I m4
+ACLOCAL_AMFLAGS = -I build/m4
 
 DISTCHECK_CONFIGURE_FLAGS = \
-	--enable-gtk-doc \
+	--enable-doc \
 	--disable-coverage
 
 dist-hook:
@@ -28,22 +41,32 @@ dist-hook:
 
 if WITH_COVERAGE
 coverage:
-	mkdir -p tests/coverage
+	mkdir -p build/coverage
 	$(LCOV) --directory . --zerocounters
 	$(MAKE) check
-	$(LCOV) --directory . --capture --output-file tests/coverage.info
-	$(GENHTML) --output-directory tests/coverage tests/coverage.info
-	@echo "file://$(abs_top_builddir)/tests/coverage/index.html"
+	$(LCOV) --directory . --capture --output-file build/coverage.info
+	$(GENHTML) --output-directory build/coverage \
+		--title "p11-kit $(PACKAGE_VERSION)" \
+		build/coverage.info
+	@echo "file://$(abs_top_builddir)/build/coverage/index.html"
+
+upload-coverage: coverage
+	rsync -Hvax build/coverage/./ $(WEBHOST):$(WEBBASE)/build/coverage/./
 endif
 
 if ENABLE_GTK_DOC
 upload-doc: all
-	rsync -Hvax --exclude doc \
-		doc/html/./ anarchy.freedesktop.org:/srv/p11-glue.freedesktop.org/www/doc/p11-kit/./
+	rsync -Hvax --exclude doc --exclude build \
+		doc/manual/html/./ $(WEBHOST):$(WEBBASE)/doc/p11-kit/./
 endif
 
 upload-release: $(DIST_ARCHIVES)
 	gpg --detach-sign --local-user 'stef@thewalter.net' $(DIST_ARCHIVES)
-	scp $(DIST_ARCHIVES) $(DIST_ARCHIVES).sig anarchy.freedesktop.org:/srv/p11-glue.freedesktop.org/www/releases/
+	scp $(DIST_ARCHIVES) $(DIST_ARCHIVES).sig $(WEBHOST):$(WEBBASE)/releases/
 
-EXTRA_DIST = config.rpath
+EXTRA_DIST = \
+	config.rpath \
+	HACKING
+
+transifex:
+	sh build/tx-update

@@ -80,9 +80,15 @@ char*                    p11_kit_space_strdup              (const unsigned char 
 
 #ifdef P11_KIT_FUTURE_UNSTABLE_API
 
+void                     p11_kit_set_progname              (const char *progname);
+
 void                     p11_kit_be_quiet                  (void);
 
+void                     p11_kit_be_loud                   (void);
+
 const char*              p11_kit_message                   (void);
+
+typedef void          (* p11_kit_destroyer)                (void *data);
 
 #endif
 

@@ -36,10 +36,11 @@
 #ifndef __CONF_H__
 #define __CONF_H__
 
-#include "hashmap.h"
+#include "dict.h"
 
 enum {
 	CONF_IGNORE_MISSING = 0x01,
+	CONF_IGNORE_ACCESS_DENIED = 0x02,
 };
 
 enum {
@@ -49,22 +50,25 @@ enum {
 	CONF_USER_ONLY
 };
 
-int           _p11_conf_merge_defaults       (hashmap *config,
-                                              hashmap *defaults);
+bool          _p11_conf_merge_defaults       (p11_dict *config,
+                                              p11_dict *defaults);
 
 /* Returns a hash of char *key -> char *value */
-hashmap *     _p11_conf_parse_file           (const char *filename,
+p11_dict * _p11_conf_parse_file           (const char *filename,
                                               int flags);
 
 /* Returns a hash of char *key -> char *value */
-hashmap *     _p11_conf_load_globals         (const char *system_conf, const char *user_conf,
+p11_dict * _p11_conf_load_globals         (const char *system_conf,
+                                              const char *user_conf,
                                               int *user_mode);
 
 /* Returns a hash of char* name -> hash_t *config */
-hashmap *     _p11_conf_load_modules         (int user_mode, const char *system_dir,
+p11_dict *    _p11_conf_load_modules         (int user_mode,
+                                              const char *package_dir,
+                                              const char *system_dir,
                                               const char *user_dir);
 
-int           _p11_conf_parse_boolean        (const char *string,
-                                              int default_value);
+bool          _p11_conf_parse_boolean        (const char *string,
+                                              bool default_value);
 
 #endif /* __CONF_H__ */
