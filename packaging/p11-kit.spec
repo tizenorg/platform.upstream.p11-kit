@@ -7,6 +7,7 @@ Url:            http://p11-glue.freedesktop.org/p11-kit.html
 Group:          Security/Crypto Libraries
 Source0:        http://p11-glue.freedesktop.org/releases/%{name}-%{version}.tar.gz
 Source99:       baselibs.conf
+Source1001: 	p11-kit.manifest
 BuildRequires:  pkg-config
 BuildRequires:  pkgconfig(libtasn1)
 
@@ -42,6 +43,7 @@ such a way that they're discoverable.
 
 %prep
 %setup -q
+cp %{SOURCE1001} .
 
 %build
 %configure --without-trust-paths
@@ -62,6 +64,7 @@ rm %{buildroot}%{_sysconfdir}/pkcs11/pkcs11.conf.example
 %postun -n libp11-kit -p /sbin/ldconfig
 
 %files -n libp11-kit
+%manifest %{name}.manifest
 %defattr(-,root,root)
 # Package the example conf file as documentation. Like this we're sure that we will
 # not introduce conflicts with this version of the library and future ones.
@@ -80,10 +83,12 @@ rm %{buildroot}%{_sysconfdir}/pkcs11/pkcs11.conf.example
 %_datadir/p11-kit/modules/p11-kit-trust.module
 
 %files tools
+%manifest %{name}.manifest
 %defattr(-,root,root)
 %{_bindir}/p11-kit
 
 %files devel
+%manifest %{name}.manifest
 %defattr(-,root,root)
 %{_includedir}/p11-kit-1/
 %{_libdir}/libp11-kit.so
