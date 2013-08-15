@@ -46,7 +46,7 @@ such a way that they're discoverable.
 cp %{SOURCE1001} .
 
 %build
-%configure --without-trust-paths
+%configure --with-trust-paths=/etc/ssl/
 make %{?_smp_mflags}
 
 %install
