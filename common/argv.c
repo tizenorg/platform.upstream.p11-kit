@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Stefan Walter
+ * Copyright (C) 2012 Red Hat Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,70 +29,87 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
  * DAMAGE.
  *
- * Author: Stef Walter <stef@thewalter.net>
+ * Author: Stef Walter <stefw@redhat.com>
  */
 
 #include "config.h"
-#include "CuTest.h"
 
-#include "library.h"
+#include "argv.h"
+#include "debug.h"
 
-#include <assert.h>
-#include <string.h>
-#include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "p11-kit/uri.h"
-#include "p11-kit/p11-kit.h"
-#include "p11-kit/private.h"
-
-static void
-test_progname_default (CuTest *tc)
+bool
+p11_argv_parse (const char *string,
+                void (*sink) (char *, void *),
+                void *argument)
 {
-	const char *progname;
+	char quote = '\0';
+	char *src, *dup, *at, *arg;
+	bool ret = true;
 
-	progname = _p11_get_progname_unlocked ();
-	CuAssertStrEquals (tc, "progname-test", progname);
-}
+	return_val_if_fail (string != NULL, false);
+	return_val_if_fail (sink != NULL, false);
 
-static void
-test_progname_set (CuTest *tc)
-{
-	const char *progname;
+	src = dup = strdup (string);
+	return_val_if_fail (dup != NULL, false);
 
-	p11_kit_set_progname ("love-generation");
+	arg = at = src;
+	for (src = dup; *src; src++) {
 
-	progname = _p11_get_progname_unlocked ();
-	CuAssertStrEquals (tc, "love-generation", progname);
+		/* Matching quote */
+		if (quote == *src) {
+			quote = '\0';
 
-	_p11_set_progname_unlocked (NULL);
+		/* Inside of quotes */
+		} else if (quote != '\0') {
+			if (*src == '\\') {
+				*at++ = *src++;
+				if (!*src) {
+					ret = false;
+					goto done;
+				}
+				if (*src != quote)
+					*at++ = '\\';
+			}
+			*at++ = *src;
 
-	progname = _p11_get_progname_unlocked ();
-	CuAssertStrEquals (tc, "progname-test", progname);
-}
+		/* Space, not inside of quotes */
+		} else if (isspace (*src)) {
+			*at = 0;
+			sink (arg, argument);
+			arg = at;
 
-/* Defined in util.c */
-extern char p11_my_progname[];
+		/* Other character outside of quotes */
+		} else {
+			switch (*src) {
+			case '\'':
+			case '"':
+				quote = *src;
+				break;
+			case '\\':
+				*at++ = *src++;
+				if (!*src) {
+					ret = false;
+					goto done;
+				}
+			/* fall through */
+			default:
+				*at++ = *src;
+				break;
+			}
+		}
+	}
 
-int
-main (void)
-{
-	CuString *output = CuStringNew ();
-	CuSuite* suite = CuSuiteNew ();
-	int ret;
 
-	putenv ("P11_KIT_STRICT=1");
-	p11_library_init ();
+	if (at != arg) {
+		*at = 0;
+		sink (arg, argument);
+	}
 
-	SUITE_ADD_TEST (suite, test_progname_default);
-	SUITE_ADD_TEST (suite, test_progname_set);
-
-	CuSuiteRun (suite);
-	CuSuiteSummary (suite, output);
-	CuSuiteDetails (suite, output);
-	printf ("%s\n", output->buffer);
-	ret = suite->failCount;
-	CuSuiteDelete (suite);
-	CuStringDelete (output);
+done:
+	free (dup);
 	return ret;
 }

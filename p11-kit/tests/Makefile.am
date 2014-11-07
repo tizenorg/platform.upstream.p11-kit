@@ -3,28 +3,40 @@ include $(top_srcdir)/build/Makefile.tests
 
 COMMON = $(top_srcdir)/common
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir) \
 	-I$(srcdir)/.. \
 	-I$(COMMON) \
-	$(CUTEST_CFLAGS)
+	$(TEST_CFLAGS)
 
 LDADD = \
 	$(top_builddir)/p11-kit/libp11-kit-testable.la \
-	$(top_builddir)/common/libp11-mock.la \
+	$(top_builddir)/common/libp11-test.la \
 	$(top_builddir)/common/libp11-common.la \
 	$(CUTEST_LIBS) \
 	$(LTLIBINTL)
 
 CHECK_PROGS = \
-	progname-test \
-	conf-test \
-	uri-test \
-	pin-test \
+	test-progname \
+	test-conf \
+	test-uri \
+	test-pin \
 	test-init \
 	test-modules \
+	test-deprecated \
+	test-proxy \
 	test-iter \
 	$(NULL)
+
+if WITH_FFI
+
+CHECK_PROGS += \
+	test-virtual \
+	test-managed \
+	test-log \
+	$(NULL)
+
+endif
 
 noinst_PROGRAMS = \
 	print-messages \
@@ -45,7 +57,7 @@ mock_one_la_CFLAGS = \
 	$(AM_CFLAGS)
 
 mock_one_la_LIBADD = \
-	$(top_builddir)/common/libp11-mock.la \
+	$(top_builddir)/common/libp11-test.la \
 	$(top_builddir)/common/libp11-common.la \
 	$(NULL)
 
@@ -68,4 +80,6 @@ mock_four_la_LDFLAGS = $(mock_one_la_LDFLAGS)
 mock_four_la_LIBADD = $(mock_one_la_LIBADD)
 
 EXTRA_DIST = \
-	files
+	files \
+	test-mock.c \
+	$(NULL)

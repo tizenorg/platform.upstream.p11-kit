@@ -71,4 +71,12 @@ extern const p11_constant    p11_constant_asserts[];
 
 extern const p11_constant    p11_constant_categories[];
 
+extern const p11_constant    p11_constant_mechanisms[];
+
+extern const p11_constant    p11_constant_states[];
+
+extern const p11_constant    p11_constant_users[];
+
+extern const p11_constant    p11_constant_returns[];
+
 #endif /* P11_CONSTANTS_H_ */

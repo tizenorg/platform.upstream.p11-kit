@@ -38,16 +38,6 @@
 #include "compat.h"
 #include "pkcs11.h"
 
-extern CK_FUNCTION_LIST _p11_proxy_function_list;
-
-CK_FUNCTION_LIST_PTR_PTR   _p11_kit_registered_modules_unlocked (void);
-
-CK_RV       _p11_kit_initialize_registered_unlocked_reentrant   (void);
-
-CK_RV       _p11_kit_finalize_registered_unlocked_reentrant     (void);
-
-void        _p11_kit_proxy_after_fork                           (void);
-
 CK_RV       _p11_load_config_files_unlocked                     (const char *system_conf,
                                                                  const char *user_conf,
                                                                  int *user_mode);

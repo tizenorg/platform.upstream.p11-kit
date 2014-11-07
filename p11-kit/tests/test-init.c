@@ -33,11 +33,16 @@
  */
 
 #include "config.h"
-#include "CuTest.h"
+#include "test.h"
 
 #include <sys/types.h>
 
 #include "library.h"
+#include "mock.h"
+#include "modules.h"
+#include "p11-kit.h"
+#include "private.h"
+#include "virtual.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -46,11 +51,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "p11-kit/p11-kit.h"
-
-#include "mock.h"
-
-CK_FUNCTION_LIST module;
+static CK_FUNCTION_LIST module;
+static p11_mutex_t race_mutex;
 
 #ifdef OS_UNIX
 
@@ -84,22 +86,41 @@ mock_C_Initialize__with_fork (CK_VOID_PTR init_args)
 }
 
 static void
-test_fork_initialization (CuTest *tc)
+test_fork_initialization (void)
 {
+	CK_FUNCTION_LIST_PTR result;
 	CK_RV rv;
+
+	mock_module_reset ();
 
 	/* Build up our own function list */
 	memcpy (&module, &mock_module_no_slots, sizeof (CK_FUNCTION_LIST));
 	module.C_Initialize = mock_C_Initialize__with_fork;
 
-	rv = p11_kit_initialize_module (&module);
-	CuAssertTrue (tc, rv == CKR_OK);
+	p11_lock ();
 
-	rv = p11_kit_finalize_module (&module);
-	CuAssertTrue (tc, rv == CKR_OK);
+	rv = p11_module_load_inlock_reentrant (&module, 0, &result);
+	assert (rv == CKR_OK);
+
+	p11_unlock ();
+
+	rv = p11_kit_module_initialize (result);
+	assert (rv == CKR_OK);
+
+	rv = p11_kit_module_finalize (result);
+	assert (rv == CKR_OK);
+
+	p11_lock ();
+
+	rv = p11_module_release_inlock_reentrant (result);
+	assert (rv == CKR_OK);
+
+	p11_unlock ();
 }
 
 #endif /* OS_UNIX */
+
+static CK_FUNCTION_LIST *recursive_managed;
 
 static CK_RV
 mock_C_Initialize__with_recursive (CK_VOID_PTR init_args)
@@ -109,12 +130,11 @@ mock_C_Initialize__with_recursive (CK_VOID_PTR init_args)
 	rv = mock_C_Initialize (init_args);
 	assert (rv == CKR_OK);
 
-	/* Recursively initialize, this is broken */
-	return p11_kit_initialize_module (&module);
+	return p11_kit_module_initialize (recursive_managed);
 }
 
 static void
-test_recursive_initialization (CuTest *tc)
+test_recursive_initialization (void)
 {
 	CK_RV rv;
 
@@ -122,15 +142,30 @@ test_recursive_initialization (CuTest *tc)
 	memcpy (&module, &mock_module_no_slots, sizeof (CK_FUNCTION_LIST));
 	module.C_Initialize = mock_C_Initialize__with_recursive;
 
-	rv = p11_kit_initialize_module (&module);
-	CuAssertTrue (tc, rv == CKR_FUNCTION_FAILED);
+	p11_kit_be_quiet ();
+
+	p11_lock ();
+
+	rv = p11_module_load_inlock_reentrant (&module, 0, &recursive_managed);
+	assert (rv == CKR_OK);
+
+	p11_unlock ();
+
+	rv = p11_kit_module_initialize (recursive_managed);
+	assert_num_eq (CKR_FUNCTION_FAILED, rv);
+
+	p11_lock ();
+
+	rv = p11_module_release_inlock_reentrant (recursive_managed);
+	assert (rv == CKR_OK);
+
+	p11_unlock ();
+
+	p11_kit_be_loud ();
 }
 
-static p11_mutex_t race_mutex;
 static int initialization_count = 0;
 static int finalization_count = 0;
-
-#include "private.h"
 
 static CK_RV
 mock_C_Initialize__threaded_race (CK_VOID_PTR init_args)
@@ -159,32 +194,36 @@ mock_C_Finalize__threaded_race (CK_VOID_PTR reserved)
 static void *
 initialization_thread (void *data)
 {
-	CuTest *tc = data;
+	CK_FUNCTION_LIST *module = data;
 	CK_RV rv;
 
-	rv = p11_kit_initialize_module (&module);
-	CuAssertTrue (tc, rv == CKR_OK);
+	assert (module != NULL);
+	rv = p11_kit_module_initialize (module);
+	assert_num_eq (rv, CKR_OK);
 
-	return tc;
+	return module;
 }
 
 static void *
 finalization_thread (void *data)
 {
-	CuTest *tc = data;
+	CK_FUNCTION_LIST *module = data;
 	CK_RV rv;
 
-	rv = p11_kit_finalize_module (&module);
-	CuAssertTrue (tc, rv == CKR_OK);
+	assert (module != NULL);
+	rv = p11_kit_module_finalize (module);
+	assert_num_eq (rv, CKR_OK);
 
-	return tc;
+	return module;
 }
 
 static void
-test_threaded_initialization (CuTest *tc)
+test_threaded_initialization (void)
 {
-	static const int num_threads = 2;
+	static const int num_threads = 1;
+	CK_FUNCTION_LIST *data[num_threads];
 	p11_thread_t threads[num_threads];
+	CK_RV rv;
 	int ret;
 	int i;
 
@@ -193,36 +232,57 @@ test_threaded_initialization (CuTest *tc)
 	module.C_Initialize = mock_C_Initialize__threaded_race;
 	module.C_Finalize = mock_C_Finalize__threaded_race;
 
+	memset (&data, 0, sizeof (data));
 	initialization_count = 0;
 	finalization_count = 0;
 
+	p11_lock ();
+
 	for (i = 0; i < num_threads; i++) {
-		ret = p11_thread_create (&threads[i], initialization_thread, tc);
-		CuAssertIntEquals (tc, 0, ret);
-		CuAssertTrue (tc, threads[i] != 0);
+		assert (data[i] == NULL);
+		rv = p11_module_load_inlock_reentrant (&module, 0, &data[i]);
+		assert (rv == CKR_OK);
+	}
+
+	p11_unlock ();
+
+	for (i = 0; i < num_threads; i++) {
+		ret = p11_thread_create (&threads[i], initialization_thread, data[i]);
+		assert_num_eq (0, ret);
+		assert (threads[i] != 0);
 	}
 
 	for (i = 0; i < num_threads; i++) {
 		ret = p11_thread_join (threads[i]);
-		CuAssertIntEquals (tc, 0, ret);
+		assert_num_eq (0, ret);
 		threads[i] = 0;
 	}
 
 	for (i = 0; i < num_threads; i++) {
-		ret = p11_thread_create (&threads[i], finalization_thread, tc);
-		CuAssertIntEquals (tc, 0, ret);
-		CuAssertTrue (tc, threads[i] != 0);
+		ret = p11_thread_create (&threads[i], finalization_thread, data[i]);
+		assert_num_eq (0, ret);
+		assert (threads[i] != 0);
 	}
 
 	for (i = 0; i < num_threads; i++) {
 		ret = p11_thread_join (threads[i]);
-		CuAssertIntEquals (tc, 0, ret);
+		assert_num_eq (0, ret);
 		threads[i] = 0;
 	}
+
+	p11_lock ();
+
+	for (i = 0; i < num_threads; i++) {
+		assert (data[i] != NULL);
+		rv = p11_module_release_inlock_reentrant (data[i]);
+		assert (rv == CKR_OK);
+	}
+
+	p11_unlock ();
 
 	/* C_Initialize should have been called exactly once */
-	CuAssertIntEquals (tc, 1, initialization_count);
-	CuAssertIntEquals (tc, 1, finalization_count);
+	assert_num_eq (1, initialization_count);
+	assert_num_eq (1, finalization_count);
 }
 
 static CK_RV
@@ -251,71 +311,106 @@ mock_C_Initialize__test_mutexes (CK_VOID_PTR args)
 }
 
 static void
-test_mutexes (CuTest *tc)
+test_mutexes (void)
 {
+	CK_FUNCTION_LIST_PTR result;
 	CK_RV rv;
 
 	/* Build up our own function list */
 	memcpy (&module, &mock_module_no_slots, sizeof (CK_FUNCTION_LIST));
 	module.C_Initialize = mock_C_Initialize__test_mutexes;
 
-	rv = p11_kit_initialize_module (&module);
-	CuAssertTrue (tc, rv == CKR_OK);
+	p11_lock ();
 
-	rv = p11_kit_finalize_module (&module);
-	CuAssertTrue (tc, rv == CKR_OK);
+	rv = p11_module_load_inlock_reentrant (&module, 0, &result);
+	assert (rv == CKR_OK);
+
+	rv = p11_module_release_inlock_reentrant (result);
+	assert (rv == CKR_OK);
+
+	p11_unlock ();
 }
 
 static void
-test_load_and_initialize (CuTest *tc)
+test_load_and_initialize (void)
 {
 	CK_FUNCTION_LIST_PTR module;
 	CK_INFO info;
 	CK_RV rv;
 	int ret;
 
-	rv = p11_kit_load_initialize_module (BUILDDIR "/.libs/mock-one" SHLEXT, &module);
-	CuAssertTrue (tc, rv == CKR_OK);
-	CuAssertTrue (tc, module != NULL);
+	module = p11_kit_module_load (BUILDDIR "/.libs/mock-one" SHLEXT, 0);
+	assert (module != NULL);
+
+	rv = p11_kit_module_initialize (module);
+	assert (rv == CKR_OK);
 
 	rv = (module->C_GetInfo) (&info);
-	CuAssertTrue (tc, rv == CKR_OK);
+	assert (rv == CKR_OK);
 
 	ret = memcmp (info.manufacturerID, "MOCK MANUFACTURER               ", 32);
-	CuAssertTrue (tc, ret == 0);
+	assert (ret == 0);
 
-	rv = p11_kit_finalize_module (module);
-	CuAssertTrue (tc, ret == CKR_OK);
+	rv = p11_kit_module_finalize (module);
+	assert (rv == CKR_OK);
+
+	p11_kit_module_release (module);
+}
+
+static void
+test_initalize_fail (void)
+{
+	CK_FUNCTION_LIST failer;
+	CK_FUNCTION_LIST *modules[3] = { &mock_module_no_slots, &failer, NULL };
+	CK_RV rv;
+
+	memcpy (&failer, &mock_module, sizeof (CK_FUNCTION_LIST));
+	failer.C_Initialize = mock_C_Initialize__fails;
+
+	mock_module_reset ();
+	p11_kit_be_quiet ();
+
+	rv = p11_kit_modules_initialize (modules, NULL);
+	assert_num_eq (CKR_FUNCTION_FAILED, rv);
+
+	p11_kit_be_loud ();
+
+	/* Failed modules get removed from the list */
+	assert_ptr_eq (&mock_module_no_slots, modules[0]);
+	assert_ptr_eq (NULL, modules[1]);
+	assert_ptr_eq (NULL, modules[2]);
+
+	p11_kit_modules_finalize (modules);
+}
+
+static void
+test_finalize_fail (void)
+{
+
 }
 
 int
-main (void)
+main (int argc,
+      char *argv[])
 {
-	CuString *output = CuStringNew ();
-	CuSuite* suite = CuSuiteNew ();
-	int ret;
-
-	putenv ("P11_KIT_STRICT=1");
 	p11_mutex_init (&race_mutex);
 	mock_module_init ();
 	p11_library_init ();
 
+	/* These only work when managed */
+	if (p11_virtual_can_wrap ()) {
+		p11_test (test_recursive_initialization, "/init/test_recursive_initialization");
+		p11_test (test_threaded_initialization, "/init/test_threaded_initialization");
+		p11_test (test_mutexes, "/init/test_mutexes");
+		p11_test (test_load_and_initialize, "/init/test_load_and_initialize");
+
 #ifdef OS_UNIX
-	SUITE_ADD_TEST (suite, test_fork_initialization);
+		p11_test (test_fork_initialization, "/init/test_fork_initialization");
 #endif
+	}
 
-	SUITE_ADD_TEST (suite, test_recursive_initialization);
-	SUITE_ADD_TEST (suite, test_threaded_initialization);
-	SUITE_ADD_TEST (suite, test_mutexes);
-	SUITE_ADD_TEST (suite, test_load_and_initialize);
+	p11_test (test_initalize_fail, "/init/test_initalize_fail");
+	p11_test (test_finalize_fail, "/init/test_finalize_fail");
 
-	CuSuiteRun (suite);
-	CuSuiteSummary (suite, output);
-	CuSuiteDetails (suite, output);
-	printf ("%s\n", output->buffer);
-	ret = suite->failCount;
-	CuSuiteDelete (suite);
-	CuStringDelete (output);
-
-	return ret;
+	return p11_test_run (argc, argv);
 }

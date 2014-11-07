@@ -1,7 +1,7 @@
 AC_PREREQ(2.61)
 
 AC_INIT([p11-kit],
-	[0.18.4],
+	[0.19.1],
 	[https://bugs.freedesktop.org/enter_bug.cgi?product=p11-glue],
 	[p11-kit],
 	[http://p11-glue.freedesktop.org/p11-kit.html])
@@ -36,6 +36,7 @@ dnl Checks for programs.
 AC_PROG_CC
 AC_PROG_CPP
 AM_PROG_CC_C_O
+PKG_PROG_PKG_CONFIG
 
 LINGUAS=""
 AM_GNU_GETTEXT([external], [need-ngettext])
@@ -154,6 +155,35 @@ AS_IF([test "$with_libtasn1" != "no"], [
 ])
 
 AM_CONDITIONAL(WITH_ASN1, test "$with_libtasn1" = "yes")
+
+# --------------------------------------------------------------------
+# libffi
+
+AC_ARG_WITH([libffi],
+            AS_HELP_STRING([--without-libffi],
+                           [Don't use libffi for building closures]))
+
+if test "$with_libffi" != "no"; then
+	PKG_CHECK_MODULES(LIBFFI, [libffi >= 3.0.0])
+	AC_DEFINE_UNQUOTED(WITH_FFI, 1, [Use libffi for building closures])
+	AC_SUBST(LIBFFI_CFLAGS)
+	AC_SUBST(LIBFFI_LIBS)
+
+	SAVE_CFLAGS="$CFLAGS"
+	CFLAGS="$CFLAGS $LIBFFI_CFLAGS"
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <ffi.h>],
+	                  [ #if FFI_CLOSURES
+	                    #else
+	                    #error no closures
+	                    #endif
+	                  ])],
+	[], [AC_MSG_ERROR([the libffi on this system has no support for closures.])])
+	CFLAGS="$SAVE_CFLAGS"
+
+	with_libffi="yes"
+fi
+
+AM_CONDITIONAL(WITH_FFI, test "$with_libffi" = "yes")
 
 # --------------------------------------------------------------------
 # Trust Module
@@ -398,17 +428,7 @@ echo $PACKAGE_VERSION | tr '.' ' ' | while read major minor unused; do
 	break
 done
 
-case "$host" in
-*-*-darwin*)
-	# It seems like libtool lies about this see:
-	# https://bugs.freedesktop.org/show_bug.cgi?id=57714
-	SHLEXT='.so'
-	;;
-*)
-	eval SHLEXT=$shrext_cmds
-	;;
-esac
-
+eval SHLEXT=$shrext_cmds
 AC_DEFINE_UNQUOTED(SHLEXT, ["$SHLEXT"], [File extension for shared libraries])
 AC_SUBST(SHLEXT)
 
@@ -429,9 +449,9 @@ AC_CONFIG_FILES([Makefile
 	p11-kit/p11-kit-1.pc
 	p11-kit/pkcs11.conf.example
 	tools/Makefile
+	tools/p11-kit-extract-trust
 	tools/tests/Makefile
 	trust/Makefile
-	trust/p11-kit-extract-trust
 	trust/tests/Makefile
 ])
 AC_OUTPUT
@@ -454,6 +474,7 @@ AC_MSG_NOTICE([build options:
     Load relative module paths from: $p11_module_path
 
     With libtasn1 dependency:        $with_libtasn1
+    With libffi:                     $with_libffi
 
     Build trust module:              $enable_trust_module
     Trust module paths:              $trust_status

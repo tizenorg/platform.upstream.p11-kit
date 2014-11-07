@@ -128,6 +128,16 @@ x-custom : text
 		</listitem>
 	</varlistentry>
 	<varlistentry>
+		<term><option>managed:</option></term>
+		<listitem>
+			<para>Set to <literal>no</literal> if the module is not to be managed by
+			p11-kit. Making a module unmanaged is not recommended, and will cause
+			problems if multiple callers in a single process share a PKCS#11 module.</para>
+
+			<para>This argument is optonal and defaults to <literal>yes</literal>.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
 		<term><option>priority:</option></term>
 		<listitem>
 			<para>The value should be an integer. When lists of modules are
@@ -145,6 +155,15 @@ x-custom : text
 		<listitem>
 			<para>Set to <literal>yes</literal> to use use this module as a source
 			of trust policy information such as certificate anchors and black lists.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry id="option-log-calls">
+		<term>log-calls:</term>
+		<listitem>
+			<para>Set to <literal>yes</literal> to write a log to stderr of all the
+			calls into the module. This is only supported for managed modules.</para>
+
+			<para>This argument is optonal and defaults to <literal>no</literal>.</para>
 		</listitem>
 	</varlistentry>
 	</variablelist>
@@ -171,6 +190,30 @@ x-custom : text
 		<listitem><para>This will be equal to one of the following values:
 		<literal>none</literal>, <literal>merge</literal>,
 		<literal>only</literal>.</para></listitem>
+	</varlistentry>
+	<varlistentry>
+		<term><option>managed:</option></term>
+		<listitem>
+			<para>Set to <literal>yes</literal> or <literal>no</literal> to
+			force all modules to be managed or unmanaged by p11-kit. Setting this
+			setting in a global configuration file will override the
+			<literal>managed</literal> setting in the individual module configuration
+			files. Making modules unmanaged is not recommended, and will cause
+			problems if multiple callers in a single process share a PKCS#11
+			module.</para>
+
+			<para>This argument is optonal.</para>
+		</listitem>
+	</varlistentry>
+	<varlistentry>
+		<term>log-calls:</term>
+		<listitem>
+			<para>Set to <literal>yes</literal> to write a log to stderr of all the
+			calls into all configured modules. This is only supported for managed
+			modules.</para>
+
+			<para>This argument is optional.</para>
+		</listitem>
 	</varlistentry>
 	</variablelist>
 

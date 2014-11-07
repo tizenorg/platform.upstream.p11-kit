@@ -1,132 +1,376 @@
 # Generate automatically. Do not edit.
 
-commit 86c0afcdb4329f54c8a7992b323611bdf3203ff0
-Author: Stef Walter <stef@thewalter.net>
-Date:   2013-06-24
-
-    Release version 0.18.4
-
- NEWS         | 3 +++
- configure.ac | 2 +-
- 2 files changed, 4 insertions(+), 1 deletion(-)
-
-commit 93f197792150ae2e2e3ffafb903dfab6854915cb
-Author: Stef Walter <stef@thewalter.net>
-Date:   2013-06-17
-
-    trust: Move the extract-trust external placeholder command into trust/
-
- .gitignore                     |  3 ++-
- configure.ac                   |  2 +-
- tools/Makefile.am              |  4 ----
- tools/p11-kit-extract-trust.in | 26 --------------------------
- trust/Makefile.am              |  4 ++++
- trust/p11-kit-extract-trust.in | 26 ++++++++++++++++++++++++++
- 6 files changed, 33 insertions(+), 32 deletions(-)
-
-commit 41d2a28b89af41799d01d5973d026712d9174f31
-Author: Stef Walter <stef@thewalter.net>
-Date:   2013-06-17
-
-    trust: Print out usage when extract-trust run incorrectly
-    
-    Also sorta covers --help and -h usage
-
- tools/p11-kit-extract-trust.in | 7 ++++++-
- 1 file changed, 6 insertions(+), 1 deletion(-)
-
-commit e32481727387460d5900d0bbb495d3694facf64b
-Author: Stef Walter <stef@thewalter.net>
-Date:   2013-06-17
-
-    tools: Fix passing args to external commands
-    
-    There were various bugs passing arguments, with duplicates being
-    passed, as well as certain arguments being skipped.t
-
- tools/tool.c | 4 ++++
- 1 file changed, 4 insertions(+)
-
-commit b6e065cda1db37a6c8ed52dac3432468e1277323
-Author: Stef Walter <stef@thewalter.net>
-Date:   2013-06-17
-
-    tools: Only use our private path when looking for external commands
-    
-    Instead of looking for external commands in the path, just look
-    for them in our private directory.
-    
-    We want to be conservative early on, and limit what sorta things
-    we have to maintain later. We can later remove this restriction
-    if a real use case presents itself.
-
- tools/tool.c | 11 ++++-------
- 1 file changed, 4 insertions(+), 7 deletions(-)
-
-commit 49e344cfa48d765ccc83a7313b1ba1c30252b84e
-Author: Stef Walter <stef@thewalter.net>
-Date:   2013-06-05
-
-    Release version 0.18.3
-
- NEWS         | 5 +++++
- configure.ac | 2 +-
- 2 files changed, 6 insertions(+), 1 deletion(-)
-
-commit 1b61494bb10866841e52956a2b65b75259f64e3c
+commit 4fd057258177f4f14bbe78c2d02d5a65eaf3f3dc
 Author: Stef Walter <stefw@gnome.org>
-Date:   2013-06-05
+Date:   2013-05-27
 
-    trust: Fix crash when C_Initialize args are NULL
-    
-    https://bugs.freedesktop.org/show_bug.cgi?id=65401
+    Release version 0.19.1
 
- trust/module.c            |  5 ++++-
- trust/tests/test-module.c | 18 ++++++++++++++++++
- 2 files changed, 22 insertions(+), 1 deletion(-)
+ NEWS         | 11 +++++++++++
+ configure.ac |  2 +-
+ 2 files changed, 12 insertions(+), 1 deletion(-)
 
-commit 3dc38f294af5bbe1939d38ec9b3fcd699f97c8ce
+commit e98522ba9e92be79526eba9daee9f60aa30ad942
 Author: Stef Walter <stefw@gnome.org>
-Date:   2013-06-05
+Date:   2013-05-21
 
-    trust: Fix reinitialization of trust module
-    
-    Track number of C_Initialize calls, and require similar number
-    of C_Finalize calls to finalize.
-    
-    This fixes leaks/disappearing sessions in the trust module.
-    
-    https://bugs.freedesktop.org/show_bug.cgi?id=65401
+    Mark p11_kit_message() as a stable function
 
- trust/module.c                | 25 +++++++++++++---
- trust/tests/frob-multi-init.c | 69 +++++++++++++++++++++++++++++++++++++++++++
- trust/tests/test-module.c     | 49 ++++++++++++++++++++++++++++++
- 3 files changed, 139 insertions(+), 4 deletions(-)
+ doc/manual/p11-kit-sections.txt | 2 +-
+ p11-kit/p11-kit.h               | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-commit cf91dc6975424e3ba3971e4496e91036e97419e5
-Author: manphiz@gmail.com <manphiz@gmail.com>
-Date:   2013-04-24
+commit 61a9cfa62972678f1cbbad7f4d1a814e9b7f05e2
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-05-21
 
-    Fix uninitialized p11_library_once
-    
-    https://bugs.freedesktop.org/show_bug.cgi?id=57714
+    Fix building of applications using CRYPTOKI_GNU style
 
- common/library.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ p11-kit/p11-kit.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-commit f358242f0068b280c1478075617288095dd95adc
+commit 435843812ab7b85f97cfdc32ae9412f78242b950
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-05-21
+
+    Bump the version for deprecated function documentation
+
+ p11-kit/modules.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+commit 30830eb693ac2e89f28bb34459db6837031ca795
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-04-09
+
+    Fix up Makefile.am files for automake 1.13 warnings
+
+ common/tests/Makefile.am  | 4 ++--
+ p11-kit/Makefile.am       | 2 +-
+ p11-kit/tests/Makefile.am | 2 +-
+ tools/Makefile.am         | 2 +-
+ tools/tests/Makefile.am   | 2 +-
+ trust/Makefile.am         | 2 +-
+ trust/tests/Makefile.am   | 2 +-
+ 7 files changed, 8 insertions(+), 8 deletions(-)
+
+commit dcabaf1d56d410ba7ddb3dfbab9011bbbea5e6bc
 Author: Stef Walter <stefw@gnome.org>
 Date:   2013-04-05
 
-    Force Mac OS shared library extension to .so
+    Our own unit testing framework
     
-    Darwin and libtool seem confused about what shared library
-    extension they actually use.
-    
-    https://bugs.freedesktop.org/show_bug.cgi?id=57714
+     * Support the TAP protocol
+     * Much cleaner without having to carry around state
+     * First class support for setup/teardown
+     * Port the common tests
+     * Wait on porting other tests until we've merged outstanding code
 
- configure.ac | 12 +++++++++++-
- 1 file changed, 11 insertions(+), 1 deletion(-)
+ build/Makefile.am               |    8 -
+ build/Makefile.tests            |    5 +-
+ build/cutest/CuTest.c           |  329 ----------
+ build/cutest/CuTest.h           |  111 ----
+ build/cutest/README.txt         |  211 -------
+ build/cutest/license.txt        |   38 --
+ common/Makefile.am              |    5 +-
+ common/debug.h                  |    2 +
+ common/test.c                   |  261 ++++++++
+ common/test.h                   |  131 ++++
+ common/tests/Makefile.am        |    3 +-
+ common/tests/test-array.c       |  101 ++--
+ common/tests/test-asn1.c        |   53 +-
+ common/tests/test-attrs.c       |  461 +++++++-------
+ common/tests/test-base64.c      |   67 +--
+ common/tests/test-buffer.c      |  113 ++--
+ common/tests/test-compat.c      |   28 +-
+ common/tests/test-constants.c   |   45 +-
+ common/tests/test-dict.c        |  250 ++++----
+ common/tests/test-hash.c        |   74 +--
+ common/tests/test-lexer.c       |  126 ++--
+ common/tests/test-oid.c         |   45 +-
+ common/tests/test-path.c        |   68 +--
+ common/tests/test-pem.c         |   76 +--
+ common/tests/test-url.c         |   93 ++-
+ common/tests/test-utf8.c        |   60 +-
+ common/tests/test-x509.c        |  106 ++--
+ p11-kit/tests/Makefile.am       |   14 +-
+ p11-kit/tests/conf-test.c       |  428 -------------
+ p11-kit/tests/pin-test.c        |  325 ----------
+ p11-kit/tests/progname-test.c   |   98 ---
+ p11-kit/tests/test-conf.c       |  414 +++++++++++++
+ p11-kit/tests/test-deprecated.c |  187 +++---
+ p11-kit/tests/test-init.c       |  144 ++---
+ p11-kit/tests/test-iter.c       |  481 ++++++++-------
+ p11-kit/tests/test-log.c        |   41 +-
+ p11-kit/tests/test-managed.c    |   97 ++-
+ p11-kit/tests/test-mock.c       | 1012 +++++++++++++++----------------
+ p11-kit/tests/test-modules.c    |  157 +++--
+ p11-kit/tests/test-pin.c        |  313 ++++++++++
+ p11-kit/tests/test-progname.c   |   86 +++
+ p11-kit/tests/test-proxy.c      |   75 +--
+ p11-kit/tests/test-uri.c        | 1245 ++++++++++++++++++++++++++++++++++++++
+ p11-kit/tests/test-virtual.c    |   70 +--
+ p11-kit/tests/uri-test.c        | 1258 ---------------------------------------
+ tools/tests/Makefile.am         |    6 +-
+ tools/tests/test-extract.c      |  221 +++----
+ tools/tests/test-openssl.c      |  186 +++---
+ tools/tests/test-pem.c          |   96 +--
+ tools/tests/test-save.c         |  329 +++++-----
+ tools/tests/test-tools.c        |  216 +++++++
+ tools/tests/test-tools.h        |  260 ++++++++
+ tools/tests/test-x509.c         |  102 ++--
+ tools/tests/test.c              |  209 -------
+ tools/tests/test.h              |  260 --------
+ trust/tests/Makefile.am         |    5 +-
+ trust/tests/test-builder.c      |  446 +++++---------
+ trust/tests/test-data.c         |  160 -----
+ trust/tests/test-data.h         |  273 ---------
+ trust/tests/test-index.c        |  395 ++++++------
+ trust/tests/test-module.c       |  470 ++++++---------
+ trust/tests/test-parser.c       |  219 +++----
+ trust/tests/test-persist.c      |  155 +++--
+ trust/tests/test-token.c        |   93 +--
+ trust/tests/test-trust.c        |  152 +++++
+ trust/tests/test-trust.h        |  273 +++++++++
+ 66 files changed, 6277 insertions(+), 7564 deletions(-)
+
+commit 7fd6d89d92b6f1b543bf2aa4b2e578201dad7147
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-04-06
+
+    Further reorganization of the core module tracking
+    
+     * Keep the module ownership apart from the tracking of module
+       function pointers, since these are only relevant for unmanaged
+       modules.
+     * Less assumptions that each module has a raw unmanaged module
+       function pointer.
+     * More clarity in the naming of dictionaries tracking the modules.
+
+ p11-kit/modules.c | 349 +++++++++++++++++++++++++-----------------------------
+ 1 file changed, 161 insertions(+), 188 deletions(-)
+
+commit eb88be6c0b7ea39a74cd2aa8af33371de4aeb74c
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-04-07
+
+    Pull the argv parsing code into its own file
+    
+    So it can be used from multiple code paths
+
+ common/Makefile.am |   1 +
+ common/argv.c      | 115 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ common/argv.h      |  44 ++++++++++++++++++++
+ trust/module.c     |  78 ++----------------------------------
+ 4 files changed, 164 insertions(+), 74 deletions(-)
+
+commit 7b848defc704cc1fbb47a16b23727583c14b804d
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-04-06
+
+    Support /xxx/yyy as an absolute path with Win32
+    
+    Because win32 code doesn't just run on windows, wine runs
+    with unix style paths.
+
+ common/path.c            | 8 ++++----
+ common/tests/test-path.c | 2 +-
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+commit 10d26767fa39f43b0aabb82d73ed88b2c2522397
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-05-21
+
+    Bump the version number to unstable
+
+ configure.ac | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit b73f4ef126bdead47262e29e47d159a89984d65f
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-02-19
+
+    Add the log-calls module config option
+    
+    If 'log-calls = yes' is set then all the PKCS#11 modules are logged
+    to stderr.
+
+ common/attrs.c                 |   22 +-
+ common/attrs.h                 |    9 +
+ common/constants.c             |  350 ++++++-
+ common/constants.h             |    8 +
+ common/tests/test-constants.c  |   18 +-
+ doc/manual/Makefile.am         |    1 +
+ doc/manual/p11-kit-sharing.xml |    5 +
+ doc/manual/pkcs11.conf.xml     |   19 +
+ p11-kit/Makefile.am            |    1 +
+ p11-kit/log.c                  | 2022 ++++++++++++++++++++++++++++++++++++++++
+ p11-kit/log.h                  |   53 ++
+ p11-kit/modules.c              |   44 +-
+ p11-kit/tests/Makefile.am      |    1 +
+ p11-kit/tests/test-log.c       |  125 +++
+ p11-kit/tests/test-mock.c      |    4 +-
+ 15 files changed, 2646 insertions(+), 36 deletions(-)
+
+commit a14ff781ebf231daa99990fd65c2312f26db93a8
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-02-19
+
+    Manage C_CloseAllSessions function for multiple callers
+    
+    Make C_CloseAllSessions work for different callers. Track the sessions
+    that each caller opens and close just those when C_CloseAllSessiosn is
+    called.
+
+ common/mock.c                  |   2 +-
+ doc/manual/p11-kit-sharing.xml |   6 ++
+ p11-kit/modules.c              | 202 ++++++++++++++++++++++++++++++++++++++++-
+ p11-kit/tests/test-init.c      |   9 +-
+ p11-kit/tests/test-managed.c   |  64 ++++++++++++-
+ 5 files changed, 275 insertions(+), 8 deletions(-)
+
+commit 0cb1132469c1e13be64f85cd6566e6617bfe32cc
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-02-15
+
+    Update the proxy module to use managed PKCS#11 modules
+    
+    Each time C_GetFunctionList is called on the proxy module, a new
+    managed PKCS#11 set of functions is returned. These are all cleaned
+    up when the module is unloaded.
+    
+    We want the proxy module to continue to work even without the highly
+    recommended libffi. For that reason we still keep the old behavior of
+    sharing state in the proxy module.
+
+ common/mock.c              |    9 -
+ common/mock.h              |   11 +
+ doc/manual/Makefile.am     |    1 +
+ p11-kit/Makefile.am        |    2 +-
+ p11-kit/modules.c          |    5 +-
+ p11-kit/private.h          |    4 -
+ p11-kit/proxy.c            | 1465 +++++++++++++++++++++++++++++++++++++-------
+ p11-kit/proxy.h            |   45 ++
+ p11-kit/tests/test-mock.c  |   26 +-
+ p11-kit/tests/test-proxy.c |  116 +++-
+ p11-kit/util.c             |    3 +
+ 11 files changed, 1422 insertions(+), 265 deletions(-)
+
+commit 5c19f0cf66495f00ccf69eba1d0915f862a88c8d
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-02-06
+
+    p11-kit: Managed PKCS#11 module loading
+    
+    Support a new managed style module loading for PKCS#11 modules. This
+    allows us to better coordinate between multiple callers of the same
+    PKCS#11 modules and provide hooks into their behavior.
+    
+    This meant redoing the public facing API. The old methods are now
+    deprecated, marked and documented as such.
+
+ common/compat.c                             |    6 +
+ common/compat.h                             |    4 +-
+ common/mock.c                               |   63 +-
+ common/mock.h                               |    6 +-
+ doc/manual/Makefile.am                      |    2 +
+ doc/manual/p11-kit-docs.xml                 |    2 +
+ doc/manual/p11-kit-proxy.xml                |   29 +
+ doc/manual/p11-kit-sections.txt             |   39 +-
+ doc/manual/p11-kit-sharing.xml              |   94 +-
+ doc/manual/pkcs11.conf.xml                  |   24 +
+ gtk-doc.make                                |    2 +-
+ p11-kit/Makefile.am                         |    7 +-
+ p11-kit/deprecated.h                        |   97 ++
+ p11-kit/docs.h                              |   38 +
+ p11-kit/modules.c                           | 1498 ++++++++++++++++++++----
+ p11-kit/modules.h                           |   51 +
+ p11-kit/p11-kit.h                           |   63 +-
+ p11-kit/private.h                           |    6 -
+ p11-kit/proxy.c                             |  231 ++--
+ p11-kit/tests/Makefile.am                   |   10 +-
+ p11-kit/tests/files/system-pkcs11.conf      |    5 +-
+ p11-kit/tests/files/user-modules/one.module |    3 +-
+ p11-kit/tests/test-deprecated.c             |  521 +++++++++
+ p11-kit/tests/test-init.c                   |  176 ++-
+ p11-kit/tests/test-iter.c                   |   72 +-
+ p11-kit/tests/test-managed.c                |  168 +++
+ p11-kit/tests/test-mock.c                   | 1687 +++++++++++++++++++++++++++
+ p11-kit/tests/test-modules.c                |  124 +-
+ p11-kit/tests/test-proxy.c                  |   94 ++
+ tools/extract.c                             |   15 +-
+ tools/list.c                                |   16 +-
+ tools/tests/test-extract.c                  |    7 +-
+ tools/tests/test-openssl.c                  |    9 +-
+ tools/tests/test-pem.c                      |    9 +-
+ tools/tests/test-x509.c                     |    9 +-
+ trust/tests/frob-nss-trust.c                |   25 +-
+ 36 files changed, 4660 insertions(+), 552 deletions(-)
+
+commit ff853bd7902e271256cada4a1b20a3d46b519b69
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-01-10
+
+    Use libffi to implement mixins for managed code
+    
+     * This allows us to call into subclassed PKCS#11 modules as if
+       they were plain old PKCS#11 modules
+     * libffi is an optional dependency
+
+ configure.ac                 |   31 +
+ doc/manual/Makefile.am       |    5 +-
+ doc/manual/p11-kit-devel.xml |    3 +
+ p11-kit/Makefile.am          |    7 +-
+ p11-kit/tests/Makefile.am    |    7 +
+ p11-kit/tests/test-virtual.c |  183 +++
+ p11-kit/virtual.c            | 2964 ++++++++++++++++++++++++++++++++++++++++++
+ p11-kit/virtual.h            |   68 +
+ 8 files changed, 3265 insertions(+), 3 deletions(-)
+
+commit a7af75a31010109529a9edddc825538884f326ca
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-02-14
+
+    Add subclassable CK_X_FUNCTION_LIST
+    
+    One of the flaws in PKCS#11 for our usage is that each PKCS#11 module
+    is not passed the pointer to the function list, ie: the vtable
+    
+    Here we define a new function list vtable, where each PKCS#11 function
+    takes the vtable itself as the first argument. We use this new
+    list internally to represent subclassable PKCS#11 modules for
+    various features.
+
+ common/mock.c    | 757 ++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ common/mock.h    | 370 ++++++++++++++++++++++++++-
+ common/pkcs11x.h | 438 ++++++++++++++++++++++++++++++++
+ 3 files changed, 1561 insertions(+), 4 deletions(-)
+
+commit 06a84bafc7c5f0ac92883e9219a7c00f456df39c
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-05-15
+
+    Fail early when running automaint.sh
+
+ automaint.sh | 2 ++
+ 1 file changed, 2 insertions(+)
+
+commit de8b99e2f04f94313a7748adedf7535603013951
+Author: Stef Walter <stefw@gnome.org>
+Date:   2013-05-15
+
+    Implement valgrind's hellgrind checks for threading problems
+    
+    And cleanup our locks/locking model. There's no need to use
+    recursive locks, especially since we can't use them on all
+    platforms. In addition adjust taking of locks during initialization
+    so that there's no chance of deadlocking here.
+
+ automaint.sh         | 2 +-
+ build/Makefile.decl  | 5 +++++
+ build/Makefile.tests | 5 +++++
+ common/compat.c      | 2 +-
+ p11-kit/modules.c    | 2 +-
+ 5 files changed, 13 insertions(+), 3 deletions(-)
 
 commit 4bd7eda265b94dfcb9a1db4aba756e1e05dd4f87
 Author: Stef Walter <stefw@gnome.org>

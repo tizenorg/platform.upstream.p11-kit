@@ -5,7 +5,7 @@ SUBDIRS = . tests
 
 COMMON = $(top_srcdir)/common
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/common \
 	-I$(top_srcdir)/p11-kit \
@@ -49,5 +49,9 @@ p11_kit_SOURCES += \
 	extract-x509.c \
 	save.c save.h \
 	$(NULL)
+
+externaldir = $(privatedir)
+external_SCRIPTS = \
+	p11-kit-extract-trust
 
 endif # WITH_ASN1

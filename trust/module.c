@@ -36,6 +36,7 @@
 
 #define CRYPTOKI_EXPORTS
 
+#include "argv.h"
 #include "array.h"
 #include "attrs.h"
 #define P11_DEBUG_FLAG P11_DEBUG_TRUST
@@ -65,11 +66,10 @@
 #define BASE_SLOT_ID   18UL
 
 static struct _Shared {
-	int initialized;
 	p11_dict *sessions;
 	p11_array *tokens;
 	char *paths;
-} gl = { 0, NULL, NULL, NULL };
+} gl = { NULL, NULL };
 
 /* Used during FindObjects */
 typedef struct _FindObjects {
@@ -249,7 +249,8 @@ create_tokens_inlock (p11_array *tokens,
 }
 
 static void
-parse_argument (char *arg)
+parse_argument (char *arg,
+                void *unused)
 {
 	char *value;
 
@@ -268,78 +269,6 @@ parse_argument (char *arg)
 	}
 }
 
-static void
-parse_arguments (const char *string)
-{
-	char quote = '\0';
-	char *src, *dup, *at, *arg;
-
-	if (!string)
-		return;
-
-	src = dup = strdup (string);
-	if (!dup) {
-		p11_message ("couldn't allocate memory for argument string");
-		return;
-	}
-
-	arg = at = src;
-	for (src = dup; *src; src++) {
-
-		/* Matching quote */
-		if (quote == *src) {
-			quote = '\0';
-
-		/* Inside of quotes */
-		} else if (quote != '\0') {
-			if (*src == '\\') {
-				*at++ = *src++;
-				if (!*src) {
-					p11_message ("couldn't parse argument string: %s", string);
-					goto done;
-				}
-				if (*src != quote)
-					*at++ = '\\';
-			}
-			*at++ = *src;
-
-		/* Space, not inside of quotes */
-		} else if (isspace(*src)) {
-			*at = 0;
-			parse_argument (arg);
-			arg = at;
-
-		/* Other character outside of quotes */
-		} else {
-			switch (*src) {
-			case '\'':
-			case '"':
-				quote = *src;
-				break;
-			case '\\':
-				*at++ = *src++;
-				if (!*src) {
-					p11_message ("couldn't parse argument string: %s", string);
-					goto done;
-				}
-				/* fall through */
-			default:
-				*at++ = *src;
-				break;
-			}
-		}
-	}
-
-
-	if (at != arg) {
-		*at = 0;
-		parse_argument (arg);
-	}
-
-done:
-	free (dup);
-}
-
 static CK_RV
 sys_C_Finalize (CK_VOID_PTR reserved)
 {
@@ -355,13 +284,10 @@ sys_C_Finalize (CK_VOID_PTR reserved)
 	} else {
 		p11_lock ();
 
-			if (gl.initialized == 0) {
-				p11_debug ("trust module is not initialized");
+			if (!gl.sessions) {
 				rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
-			} else if (gl.initialized == 1) {
-				p11_debug ("doing finalization");
-
+			} else {
 				free (gl.paths);
 				gl.paths = NULL;
 
@@ -372,11 +298,6 @@ sys_C_Finalize (CK_VOID_PTR reserved)
 				gl.tokens = NULL;
 
 				rv = CKR_OK;
-				gl.initialized = 0;
-
-			} else {
-				gl.initialized--;
-				p11_debug ("trust module still initialized %d times", gl.initialized);
 			}
 
 		p11_unlock ();
@@ -389,8 +310,6 @@ sys_C_Finalize (CK_VOID_PTR reserved)
 static CK_RV
 sys_C_Initialize (CK_VOID_PTR init_args)
 {
-	static CK_C_INITIALIZE_ARGS def_args =
-		{ NULL, NULL, NULL, NULL, CKF_OS_LOCKING_OK, NULL, };
 	CK_C_INITIALIZE_ARGS *args = NULL;
 	int supplied_ok;
 	CK_RV rv;
@@ -405,9 +324,8 @@ sys_C_Initialize (CK_VOID_PTR init_args)
 
 		rv = CKR_OK;
 
+		/* pReserved must be NULL */
 		args = init_args;
-		if (args == NULL)
-			args = &def_args;
 
 		/* ALL supplied function pointers need to have the value either NULL or non-NULL. */
 		supplied_ok = (args->CreateMutex == NULL && args->DestroyMutex == NULL &&
@@ -428,19 +346,13 @@ sys_C_Initialize (CK_VOID_PTR init_args)
 			rv = CKR_CANT_LOCK;
 		}
 
-		if (rv == CKR_OK && gl.initialized != 0) {
-			p11_debug ("trust module already initialized %d times",
-			           gl.initialized);
-
 		/*
 		 * We support setting the socket path and other arguments from from the
 		 * pReserved pointer, similar to how NSS PKCS#11 components are initialized.
 		 */
-		} else if (rv == CKR_OK) {
-			p11_debug ("doing initialization");
-
+		if (rv == CKR_OK) {
 			if (args->pReserved)
-				parse_arguments ((const char*)args->pReserved);
+				p11_argv_parse ((const char*)args->pReserved, parse_argument, NULL);
 
 			gl.sessions = p11_dict_new (p11_dict_ulongptr_hash,
 			                            p11_dict_ulongptr_equal,
@@ -455,8 +367,6 @@ sys_C_Initialize (CK_VOID_PTR init_args)
 				rv = CKR_GENERAL_ERROR;
 			}
 		}
-
-		gl.initialized++;
 
 	p11_unlock ();
 

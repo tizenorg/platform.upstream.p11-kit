@@ -194,19 +194,20 @@ exec_external (const char *command,
                char *argv[])
 {
 	char *filename;
-	char *path;
+	const char *path;
+	char *env;
 
 	if (!asprintf (&filename, "p11-kit-%s", command) < 0)
 		return_if_reached ();
 
 	/* Add our libexec directory to the path */
-	path = p11_path_build (PRIVATEDIR, filename, NULL);
-	return_if_fail (path != NULL);
+	path = getenv ("PATH");
+	if (!asprintf (&env, "PATH=%s%s%s", path ? path : "", path ? P11_PATH_SEP : "", PRIVATEDIR))
+		return_if_reached ();
+	putenv (env);
 
 	argv[0] = filename;
-	argv[argc] = NULL;
-
-	execvp (path, argv);
+	execvp (filename, argv);
 }
 
 static void
@@ -247,8 +248,6 @@ main (int argc, char *argv[])
 			if (!command) {
 				skip = true;
 				command = argv[in];
-			} else {
-				skip = false;
 			}
 
 		/* The global long options */

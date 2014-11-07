@@ -37,6 +37,7 @@
 
 #include "compat.h"
 #include "pkcs11.h"
+#include "pkcs11x.h"
 
 enum {
 	MOCK_DATA_OBJECT = 2,
@@ -86,12 +87,24 @@ enum {
 
 	MOCK_SLOT_ONE_ID = 52,
 	MOCK_SLOT_TWO_ID = 134,
+
+	MOCK_SLOTS_PRESENT = 1,
+	MOCK_SLOTS_ALL = 2,
 };
 
+static const CK_INFO MOCK_INFO = {
+	{ CRYPTOKI_VERSION_MAJOR, CRYPTOKI_VERSION_MINOR },
+	"MOCK MANUFACTURER               ",
+	0,
+	"MOCK LIBRARY                    ",
+	{ 45, 145 }
+};
 
 extern       CK_FUNCTION_LIST                            mock_module;
 
 extern       CK_FUNCTION_LIST                            mock_module_no_slots;
+
+extern       CK_X_FUNCTION_LIST                          mock_x_module_no_slots;
 
 void         mock_module_init                            (void);
 
@@ -106,18 +119,29 @@ void         mock_module_enumerate_objects               (CK_SESSION_HANDLE sess
 void         mock_module_add_object                      (CK_SLOT_ID slot_id,
                                                           const CK_ATTRIBUTE *attrs);
 
+void         mock_module_reset                           (void);
+
+bool         mock_module_initialized                     (void);
+
 void         mock_module_take_object                     (CK_SLOT_ID slot_id,
                                                           CK_ATTRIBUTE *attrs);
-
-void         mock_module_reset_objects                   (CK_SLOT_ID slot_id);
 
 CK_RV        mock_C_Initialize                           (CK_VOID_PTR init_args);
 
 CK_RV        mock_C_Initialize__fails                    (CK_VOID_PTR init_args);
 
+CK_RV        mock_X_Initialize                           (CK_X_FUNCTION_LIST *self,
+                                                          CK_VOID_PTR init_args);
+
 CK_RV        mock_C_Finalize                             (CK_VOID_PTR reserved);
 
+CK_RV        mock_X_Finalize                             (CK_X_FUNCTION_LIST *self,
+                                                          CK_VOID_PTR reserved);
+
 CK_RV        mock_C_GetInfo                              (CK_INFO_PTR info);
+
+CK_RV        mock_X_GetInfo                              (CK_X_FUNCTION_LIST *self,
+                                                          CK_INFO_PTR info);
 
 CK_RV        mock_C_GetFunctionList_not_supported        (CK_FUNCTION_LIST_PTR_PTR list);
 
@@ -140,7 +164,16 @@ CK_RV        mock_C_GetSlotList__fail_late               (CK_BBOOL token_present
 CK_RV        mock_C_GetSlotInfo                          (CK_SLOT_ID slot_id,
                                                           CK_SLOT_INFO_PTR info);
 
+CK_RV        mock_X_GetSlotList__no_tokens               (CK_X_FUNCTION_LIST *self,
+                                                          CK_BBOOL token_present,
+                                                          CK_SLOT_ID_PTR slot_list,
+                                                          CK_ULONG_PTR count);
+
 CK_RV        mock_C_GetSlotInfo__invalid_slotid          (CK_SLOT_ID slot_id,
+                                                          CK_SLOT_INFO_PTR info);
+
+CK_RV        mock_X_GetSlotInfo__invalid_slotid          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SLOT_ID slot_id,
                                                           CK_SLOT_INFO_PTR info);
 
 CK_RV        mock_C_GetTokenInfo                         (CK_SLOT_ID slot_id,
@@ -149,7 +182,11 @@ CK_RV        mock_C_GetTokenInfo                         (CK_SLOT_ID slot_id,
 CK_RV        mock_C_GetTokenInfo__invalid_slotid         (CK_SLOT_ID slot_id,
                                                           CK_TOKEN_INFO_PTR info);
 
-CK_RV        mock_C_GetTokenInfo_not_initialized         (CK_SLOT_ID slot_id,
+CK_RV        mock_X_GetTokenInfo__invalid_slotid         (CK_X_FUNCTION_LIST *self,
+                                                          CK_SLOT_ID slot_id,
+                                                          CK_TOKEN_INFO_PTR info);
+
+CK_RV        mock_C_GetTokenInfo__not_initialized        (CK_SLOT_ID slot_id,
                                                           CK_TOKEN_INFO_PTR info);
 
 CK_RV        mock_C_GetMechanismList                     (CK_SLOT_ID slot_id,
@@ -160,11 +197,21 @@ CK_RV        mock_C_GetMechanismList__invalid_slotid     (CK_SLOT_ID slot_id,
                                                           CK_MECHANISM_TYPE_PTR mechanism_list,
                                                           CK_ULONG_PTR count);
 
+CK_RV        mock_X_GetMechanismList__invalid_slotid     (CK_X_FUNCTION_LIST *self,
+                                                          CK_SLOT_ID slot_id,
+                                                          CK_MECHANISM_TYPE_PTR mechanism_list,
+                                                          CK_ULONG_PTR count);
+
 CK_RV        mock_C_GetMechanismInfo                     (CK_SLOT_ID slot_id,
                                                           CK_MECHANISM_TYPE type,
                                                           CK_MECHANISM_INFO_PTR info);
 
 CK_RV        mock_C_GetMechanismInfo__invalid_slotid     (CK_SLOT_ID slot_id,
+                                                          CK_MECHANISM_TYPE type,
+                                                          CK_MECHANISM_INFO_PTR info);
+
+CK_RV        mock_X_GetMechanismInfo__invalid_slotid     (CK_X_FUNCTION_LIST *self,
+                                                          CK_SLOT_ID slot_id,
                                                           CK_MECHANISM_TYPE type,
                                                           CK_MECHANISM_INFO_PTR info);
 
@@ -178,6 +225,13 @@ CK_RV        mock_C_InitToken__invalid_slotid            (CK_SLOT_ID slot_id,
                                                           CK_ULONG pin_len,
                                                           CK_UTF8CHAR_PTR label);
 
+CK_RV        mock_X_InitToken__invalid_slotid            (CK_X_FUNCTION_LIST *self,
+                                                          CK_SLOT_ID slot_id,
+                                                          CK_UTF8CHAR_PTR pin,
+                                                          CK_ULONG pin_len,
+                                                          CK_UTF8CHAR_PTR label);
+
+
 CK_RV        mock_C_WaitForSlotEvent                     (CK_FLAGS flags,
                                                           CK_SLOT_ID_PTR slot,
                                                           CK_VOID_PTR reserved);
@@ -186,7 +240,19 @@ CK_RV        mock_C_WaitForSlotEvent__no_event           (CK_FLAGS flags,
                                                           CK_SLOT_ID_PTR slot,
                                                           CK_VOID_PTR reserved);
 
+CK_RV        mock_X_WaitForSlotEvent__no_event           (CK_X_FUNCTION_LIST *self,
+                                                          CK_FLAGS flags,
+                                                          CK_SLOT_ID_PTR slot,
+                                                          CK_VOID_PTR reserved);
+
 CK_RV        mock_C_OpenSession__invalid_slotid          (CK_SLOT_ID slot_id,
+                                                          CK_FLAGS flags,
+                                                          CK_VOID_PTR user_data,
+                                                          CK_NOTIFY callback,
+                                                          CK_SESSION_HANDLE_PTR session);
+
+CK_RV        mock_X_OpenSession__invalid_slotid          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SLOT_ID slot_id,
                                                           CK_FLAGS flags,
                                                           CK_VOID_PTR user_data,
                                                           CK_NOTIFY callback,
@@ -208,9 +274,15 @@ CK_RV        mock_C_CloseSession                         (CK_SESSION_HANDLE sess
 
 CK_RV        mock_C_CloseSession__invalid_handle         (CK_SESSION_HANDLE session);
 
+CK_RV        mock_X_CloseSession__invalid_handle         (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session);
+
 CK_RV        mock_C_CloseAllSessions                     (CK_SLOT_ID slot_id);
 
 CK_RV        mock_C_CloseAllSessions__invalid_slotid     (CK_SLOT_ID slot_id);
+
+CK_RV        mock_X_CloseAllSessions__invalid_slotid     (CK_X_FUNCTION_LIST *self,
+                                                         CK_SLOT_ID slot_id);
 
 CK_RV        mock_C_GetFunctionStatus                    (CK_SESSION_HANDLE session);
 
@@ -226,11 +298,20 @@ CK_RV        mock_C_GetSessionInfo                       (CK_SESSION_HANDLE sess
 CK_RV        mock_C_GetSessionInfo__invalid_handle       (CK_SESSION_HANDLE session,
                                                           CK_SESSION_INFO_PTR info);
 
+CK_RV        mock_X_GetSessionInfo__invalid_handle       (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_SESSION_INFO_PTR info);
+
 CK_RV        mock_C_InitPIN__specific_args               (CK_SESSION_HANDLE session,
                                                           CK_UTF8CHAR_PTR pin,
                                                           CK_ULONG pin_len);
 
 CK_RV        mock_C_InitPIN__invalid_handle              (CK_SESSION_HANDLE session,
+                                                          CK_UTF8CHAR_PTR pin,
+                                                          CK_ULONG pin_len);
+
+CK_RV        mock_X_InitPIN__invalid_handle              (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_UTF8CHAR_PTR pin,
                                                           CK_ULONG pin_len);
 
@@ -246,11 +327,23 @@ CK_RV        mock_C_SetPIN__invalid_handle               (CK_SESSION_HANDLE sess
                                                           CK_UTF8CHAR_PTR new_pin,
                                                           CK_ULONG new_pin_len);
 
+CK_RV        mock_X_SetPIN__invalid_handle               (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_UTF8CHAR_PTR old_pin,
+                                                          CK_ULONG old_pin_len,
+                                                          CK_UTF8CHAR_PTR new_pin,
+                                                          CK_ULONG new_pin_len);
+
 CK_RV        mock_C_GetOperationState                    (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR operation_state,
                                                           CK_ULONG_PTR operation_state_len);
 
 CK_RV        mock_C_GetOperationState__invalid_handle    (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR operation_state,
+                                                          CK_ULONG_PTR operation_state_len);
+
+CK_RV        mock_X_GetOperationState__invalid_handle    (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR operation_state,
                                                           CK_ULONG_PTR operation_state_len);
 
@@ -266,6 +359,13 @@ CK_RV        mock_C_SetOperationState__invalid_handle    (CK_SESSION_HANDLE sess
                                                           CK_OBJECT_HANDLE encryption_key,
                                                           CK_OBJECT_HANDLE authentication_key);
 
+CK_RV        mock_X_SetOperationState__invalid_handle    (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR operation_state,
+                                                          CK_ULONG operation_state_len,
+                                                          CK_OBJECT_HANDLE encryption_key,
+                                                          CK_OBJECT_HANDLE authentication_key);
+
 CK_RV        mock_C_Login                                (CK_SESSION_HANDLE session,
                                                           CK_USER_TYPE user_type,
                                                           CK_UTF8CHAR_PTR pin,
@@ -276,9 +376,18 @@ CK_RV        mock_C_Login__invalid_handle                (CK_SESSION_HANDLE sess
                                                           CK_UTF8CHAR_PTR pin,
                                                           CK_ULONG pin_len);
 
+CK_RV        mock_X_Login__invalid_handle                (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_USER_TYPE user_type,
+                                                          CK_UTF8CHAR_PTR pin,
+                                                          CK_ULONG pin_len);
+
 CK_RV        mock_C_Logout                               (CK_SESSION_HANDLE session);
 
 CK_RV        mock_C_Logout__invalid_handle               (CK_SESSION_HANDLE session);
+
+CK_RV        mock_X_Logout__invalid_handle               (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session);
 
 CK_RV        mock_C_CreateObject                         (CK_SESSION_HANDLE session,
                                                           CK_ATTRIBUTE_PTR template,
@@ -286,6 +395,12 @@ CK_RV        mock_C_CreateObject                         (CK_SESSION_HANDLE sess
                                                           CK_OBJECT_HANDLE_PTR object);
 
 CK_RV        mock_C_CreateObject__invalid_handle         (CK_SESSION_HANDLE session,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count,
+                                                          CK_OBJECT_HANDLE_PTR new_object);
+
+CK_RV        mock_X_CreateObject__invalid_handle         (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_ATTRIBUTE_PTR template,
                                                           CK_ULONG count,
                                                           CK_OBJECT_HANDLE_PTR new_object);
@@ -302,10 +417,21 @@ CK_RV        mock_C_CopyObject__invalid_handle           (CK_SESSION_HANDLE sess
                                                           CK_ULONG count,
                                                           CK_OBJECT_HANDLE_PTR new_object);
 
+CK_RV        mock_X_CopyObject__invalid_handle           (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_OBJECT_HANDLE object,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count,
+                                                          CK_OBJECT_HANDLE_PTR new_object);
+
 CK_RV        mock_C_DestroyObject                        (CK_SESSION_HANDLE session,
                                                           CK_OBJECT_HANDLE object);
 
 CK_RV        mock_C_DestroyObject__invalid_handle        (CK_SESSION_HANDLE session,
+                                                          CK_OBJECT_HANDLE object);
+
+CK_RV        mock_X_DestroyObject__invalid_handle        (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_OBJECT_HANDLE object);
 
 CK_RV        mock_C_GetObjectSize                        (CK_SESSION_HANDLE session,
@@ -316,12 +442,23 @@ CK_RV        mock_C_GetObjectSize__invalid_handle        (CK_SESSION_HANDLE sess
                                                           CK_OBJECT_HANDLE object,
                                                           CK_ULONG_PTR size);
 
+CK_RV        mock_X_GetObjectSize__invalid_handle        (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_OBJECT_HANDLE object,
+                                                          CK_ULONG_PTR size);
+
 CK_RV        mock_C_GetAttributeValue                    (CK_SESSION_HANDLE session,
                                                           CK_OBJECT_HANDLE object,
                                                           CK_ATTRIBUTE_PTR template,
                                                           CK_ULONG count);
 
 CK_RV        mock_C_GetAttributeValue__invalid_handle    (CK_SESSION_HANDLE session,
+                                                          CK_OBJECT_HANDLE object,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count);
+
+CK_RV        mock_X_GetAttributeValue__invalid_handle    (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_OBJECT_HANDLE object,
                                                           CK_ATTRIBUTE_PTR template,
                                                           CK_ULONG count);
@@ -346,11 +483,22 @@ CK_RV        mock_C_SetAttributeValue__invalid_handle    (CK_SESSION_HANDLE sess
                                                           CK_ATTRIBUTE_PTR template,
                                                           CK_ULONG count);
 
+CK_RV        mock_X_SetAttributeValue__invalid_handle    (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_OBJECT_HANDLE object,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count);
+
 CK_RV        mock_C_FindObjectsInit                      (CK_SESSION_HANDLE session,
                                                           CK_ATTRIBUTE_PTR template,
                                                           CK_ULONG count);
 
 CK_RV        mock_C_FindObjectsInit__invalid_handle      (CK_SESSION_HANDLE session,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count);
+
+CK_RV        mock_X_FindObjectsInit__invalid_handle      (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_ATTRIBUTE_PTR template,
                                                           CK_ULONG count);
 
@@ -368,6 +516,12 @@ CK_RV        mock_C_FindObjects__invalid_handle          (CK_SESSION_HANDLE sess
                                                           CK_ULONG max_count,
                                                           CK_ULONG_PTR count);
 
+CK_RV        mock_X_FindObjects__invalid_handle          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_OBJECT_HANDLE_PTR objects,
+                                                          CK_ULONG max_count,
+                                                          CK_ULONG_PTR count);
+
 CK_RV        mock_C_FindObjects__fails                   (CK_SESSION_HANDLE session,
                                                           CK_OBJECT_HANDLE_PTR objects,
                                                           CK_ULONG max_count,
@@ -377,11 +531,19 @@ CK_RV        mock_C_FindObjectsFinal                     (CK_SESSION_HANDLE sess
 
 CK_RV        mock_C_FindObjectsFinal__invalid_handle     (CK_SESSION_HANDLE session);
 
+CK_RV        mock_X_FindObjectsFinal__invalid_handle     (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session);
+
 CK_RV        mock_C_EncryptInit                          (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
 CK_RV        mock_C_EncryptInit__invalid_handle          (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE key);
+
+CK_RV        mock_X_EncryptInit__invalid_handle          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
@@ -392,6 +554,13 @@ CK_RV        mock_C_Encrypt                              (CK_SESSION_HANDLE sess
                                                           CK_ULONG_PTR encrypted_data_len);
 
 CK_RV        mock_C_Encrypt__invalid_handle              (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR data,
+                                                          CK_ULONG data_len,
+                                                          CK_BYTE_PTR encrypted_data,
+                                                          CK_ULONG_PTR encrypted_data_len);
+
+CK_RV        mock_X_Encrypt__invalid_handle              (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR data,
                                                           CK_ULONG data_len,
                                                           CK_BYTE_PTR encrypted_data,
@@ -409,11 +578,23 @@ CK_RV        mock_C_EncryptUpdate__invalid_handle        (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR encrypted_part,
                                                           CK_ULONG_PTR encrypted_part_len);
 
+CK_RV        mock_X_EncryptUpdate__invalid_handle        (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG part_len,
+                                                          CK_BYTE_PTR encrypted_part,
+                                                          CK_ULONG_PTR encrypted_part_len);
+
 CK_RV        mock_C_EncryptFinal                         (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR last_encrypted_part,
                                                           CK_ULONG_PTR last_encrypted_part_len);
 
 CK_RV        mock_C_EncryptFinal__invalid_handle         (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR last_part,
+                                                          CK_ULONG_PTR last_part_len);
+
+CK_RV        mock_X_EncryptFinal__invalid_handle         (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR last_part,
                                                           CK_ULONG_PTR last_part_len);
 
@@ -425,6 +606,11 @@ CK_RV        mock_C_DecryptInit__invalid_handle          (CK_SESSION_HANDLE sess
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
+CK_RV        mock_X_DecryptInit__invalid_handle          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE key);
+
 CK_RV        mock_C_Decrypt                              (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR encrypted_data,
                                                           CK_ULONG encrypted_data_len,
@@ -432,6 +618,13 @@ CK_RV        mock_C_Decrypt                              (CK_SESSION_HANDLE sess
                                                           CK_ULONG_PTR data_len);
 
 CK_RV        mock_C_Decrypt__invalid_handle              (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR enc_data,
+                                                          CK_ULONG enc_data_len,
+                                                          CK_BYTE_PTR data,
+                                                          CK_ULONG_PTR data_len);
+
+CK_RV        mock_X_Decrypt__invalid_handle              (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR enc_data,
                                                           CK_ULONG enc_data_len,
                                                           CK_BYTE_PTR data,
@@ -449,6 +642,13 @@ CK_RV        mock_C_DecryptUpdate__invalid_handle        (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG_PTR part_len);
 
+CK_RV        mock_X_DecryptUpdate__invalid_handle        (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR enc_part,
+                                                          CK_ULONG enc_part_len,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG_PTR part_len);
+
 CK_RV        mock_C_DecryptFinal                         (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR last_part,
                                                           CK_ULONG_PTR last_part_len);
@@ -457,10 +657,19 @@ CK_RV        mock_C_DecryptFinal__invalid_handle         (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR last_part,
                                                           CK_ULONG_PTR last_part_len);
 
+CK_RV        mock_X_DecryptFinal__invalid_handle         (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR last_part,
+                                                          CK_ULONG_PTR last_part_len);
+
 CK_RV        mock_C_DigestInit                           (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism);
 
 CK_RV        mock_C_DigestInit__invalid_handle           (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism);
+
+CK_RV        mock_X_DigestInit__invalid_handle           (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism);
 
 CK_RV        mock_C_Digest                               (CK_SESSION_HANDLE session,
@@ -475,6 +684,13 @@ CK_RV        mock_C_Digest__invalid_handle               (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR digest,
                                                           CK_ULONG_PTR digest_len);
 
+CK_RV        mock_X_Digest__invalid_handle               (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR data,
+                                                          CK_ULONG data_len,
+                                                          CK_BYTE_PTR digest,
+                                                          CK_ULONG_PTR digest_len);
+
 CK_RV        mock_C_DigestUpdate                         (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG part_len);
@@ -483,10 +699,19 @@ CK_RV        mock_C_DigestUpdate__invalid_handle         (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG part_len);
 
+CK_RV        mock_X_DigestUpdate__invalid_handle         (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG part_len);
+
 CK_RV        mock_C_DigestKey                            (CK_SESSION_HANDLE session,
                                                           CK_OBJECT_HANDLE key);
 
 CK_RV        mock_C_DigestKey__invalid_handle            (CK_SESSION_HANDLE session,
+                                                          CK_OBJECT_HANDLE key);
+
+CK_RV        mock_X_DigestKey__invalid_handle            (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_OBJECT_HANDLE key);
 
 CK_RV        mock_C_DigestFinal                          (CK_SESSION_HANDLE session,
@@ -497,11 +722,21 @@ CK_RV        mock_C_DigestFinal__invalid_handle          (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR digest,
                                                           CK_ULONG_PTR digest_len);
 
+CK_RV        mock_X_DigestFinal__invalid_handle          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR digest,
+                                                          CK_ULONG_PTR digest_len);
+
 CK_RV        mock_C_SignInit                             (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
 CK_RV        mock_C_SignInit__invalid_handle             (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE key);
+
+CK_RV        mock_X_SignInit__invalid_handle             (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
@@ -517,11 +752,23 @@ CK_RV        mock_C_Sign__invalid_handle                 (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR signature,
                                                           CK_ULONG_PTR signature_len);
 
+CK_RV        mock_X_Sign__invalid_handle                 (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR data,
+                                                          CK_ULONG data_len,
+                                                          CK_BYTE_PTR signature,
+                                                          CK_ULONG_PTR signature_len);
+
 CK_RV        mock_C_SignUpdate                           (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG part_len);
 
 CK_RV        mock_C_SignUpdate__invalid_handle           (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG part_len);
+
+CK_RV        mock_X_SignUpdate__invalid_handle           (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG part_len);
 
@@ -533,11 +780,21 @@ CK_RV        mock_C_SignFinal__invalid_handle            (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR signature,
                                                           CK_ULONG_PTR signature_len);
 
+CK_RV        mock_X_SignFinal__invalid_handle            (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR signature,
+                                                          CK_ULONG_PTR signature_len);
+
 CK_RV        mock_C_SignRecoverInit                      (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
 CK_RV        mock_C_SignRecoverInit__invalid_handle      (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE key);
+
+CK_RV        mock_X_SignRecoverInit__invalid_handle      (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
@@ -553,11 +810,23 @@ CK_RV        mock_C_SignRecover__invalid_handle          (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR signature,
                                                           CK_ULONG_PTR signature_len);
 
+CK_RV        mock_X_SignRecover__invalid_handle          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR data,
+                                                          CK_ULONG data_len,
+                                                          CK_BYTE_PTR signature,
+                                                          CK_ULONG_PTR signature_len);
+
 CK_RV        mock_C_VerifyInit                           (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
 CK_RV        mock_C_VerifyInit__invalid_handle           (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE key);
+
+CK_RV        mock_X_VerifyInit__invalid_handle           (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
@@ -573,11 +842,23 @@ CK_RV        mock_C_Verify__invalid_handle               (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR signature,
                                                           CK_ULONG signature_len);
 
+CK_RV        mock_X_Verify__invalid_handle               (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR data,
+                                                          CK_ULONG data_len,
+                                                          CK_BYTE_PTR signature,
+                                                          CK_ULONG signature_len);
+
 CK_RV        mock_C_VerifyUpdate                         (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG part_len);
 
 CK_RV        mock_C_VerifyUpdate__invalid_handle         (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG part_len);
+
+CK_RV        mock_X_VerifyUpdate__invalid_handle         (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG part_len);
 
@@ -589,11 +870,21 @@ CK_RV        mock_C_VerifyFinal__invalid_handle          (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR signature,
                                                           CK_ULONG signature_len);
 
+CK_RV        mock_X_VerifyFinal__invalid_handle          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR signature,
+                                                          CK_ULONG signature_len);
+
 CK_RV        mock_C_VerifyRecoverInit                    (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
 CK_RV        mock_C_VerifyRecoverInit__invalid_handle    (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE key);
+
+CK_RV        mock_X_VerifyRecoverInit__invalid_handle    (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE key);
 
@@ -604,6 +895,13 @@ CK_RV        mock_C_VerifyRecover                        (CK_SESSION_HANDLE sess
                                                           CK_ULONG_PTR data_len);
 
 CK_RV        mock_C_VerifyRecover__invalid_handle        (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR signature,
+                                                          CK_ULONG signature_len,
+                                                          CK_BYTE_PTR data,
+                                                          CK_ULONG_PTR data_len);
+
+CK_RV        mock_X_VerifyRecover__invalid_handle        (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR signature,
                                                           CK_ULONG signature_len,
                                                           CK_BYTE_PTR data,
@@ -621,6 +919,13 @@ CK_RV        mock_C_DigestEncryptUpdate__invalid_handle  (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR enc_part,
                                                           CK_ULONG_PTR enc_part_len);
 
+CK_RV        mock_X_DigestEncryptUpdate__invalid_handle  (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG part_len,
+                                                          CK_BYTE_PTR enc_part,
+                                                          CK_ULONG_PTR enc_part_len);
+
 CK_RV        mock_C_DecryptDigestUpdate                  (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR encrypted_part,
                                                           CK_ULONG encrypted_part_len,
@@ -628,6 +933,13 @@ CK_RV        mock_C_DecryptDigestUpdate                  (CK_SESSION_HANDLE sess
                                                           CK_ULONG_PTR part_len);
 
 CK_RV        mock_C_DecryptDigestUpdate__invalid_handle  (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR enc_part,
+                                                          CK_ULONG enc_part_len,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG_PTR part_len);
+
+CK_RV        mock_X_DecryptDigestUpdate__invalid_handle  (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR enc_part,
                                                           CK_ULONG enc_part_len,
                                                           CK_BYTE_PTR part,
@@ -645,6 +957,13 @@ CK_RV        mock_C_SignEncryptUpdate__invalid_handle    (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR enc_part,
                                                           CK_ULONG_PTR enc_part_len);
 
+CK_RV        mock_X_SignEncryptUpdate__invalid_handle    (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG part_len,
+                                                          CK_BYTE_PTR enc_part,
+                                                          CK_ULONG_PTR enc_part_len);
+
 CK_RV        mock_C_DecryptVerifyUpdate                  (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR encrypted_part,
                                                           CK_ULONG encrypted_part_len,
@@ -657,6 +976,13 @@ CK_RV        mock_C_DecryptVerifyUpdate__invalid_handle  (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR part,
                                                           CK_ULONG_PTR part_len);
 
+CK_RV        mock_X_DecryptVerifyUpdate__invalid_handle  (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR enc_part,
+                                                          CK_ULONG enc_part_len,
+                                                          CK_BYTE_PTR part,
+                                                          CK_ULONG_PTR part_len);
+
 CK_RV        mock_C_GenerateKey                          (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_ATTRIBUTE_PTR template,
@@ -664,6 +990,13 @@ CK_RV        mock_C_GenerateKey                          (CK_SESSION_HANDLE sess
                                                           CK_OBJECT_HANDLE_PTR key);
 
 CK_RV        mock_C_GenerateKey__invalid_handle          (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count,
+                                                          CK_OBJECT_HANDLE_PTR key);
+
+CK_RV        mock_X_GenerateKey__invalid_handle          (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_ATTRIBUTE_PTR template,
                                                           CK_ULONG count,
@@ -687,6 +1020,16 @@ CK_RV        mock_C_GenerateKeyPair__invalid_handle      (CK_SESSION_HANDLE sess
                                                           CK_OBJECT_HANDLE_PTR pub_key,
                                                           CK_OBJECT_HANDLE_PTR priv_key);
 
+CK_RV        mock_X_GenerateKeyPair__invalid_handle      (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_ATTRIBUTE_PTR pub_template,
+                                                          CK_ULONG pub_count,
+                                                          CK_ATTRIBUTE_PTR priv_template,
+                                                          CK_ULONG priv_count,
+                                                          CK_OBJECT_HANDLE_PTR pub_key,
+                                                          CK_OBJECT_HANDLE_PTR priv_key);
+
 CK_RV        mock_C_WrapKey                              (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE wrapping_key,
@@ -695,6 +1038,14 @@ CK_RV        mock_C_WrapKey                              (CK_SESSION_HANDLE sess
                                                           CK_ULONG_PTR wrapped_key_len);
 
 CK_RV        mock_C_WrapKey__invalid_handle              (CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE wrapping_key,
+                                                          CK_OBJECT_HANDLE key,
+                                                          CK_BYTE_PTR wrapped_key,
+                                                          CK_ULONG_PTR wrapped_key_len);
+
+CK_RV        mock_X_WrapKey__invalid_handle              (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE wrapping_key,
                                                           CK_OBJECT_HANDLE key,
@@ -719,6 +1070,16 @@ CK_RV        mock_C_UnwrapKey__invalid_handle            (CK_SESSION_HANDLE sess
                                                           CK_ULONG count,
                                                           CK_OBJECT_HANDLE_PTR key);
 
+CK_RV        mock_X_UnwrapKey__invalid_handle            (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE unwrapping_key,
+                                                          CK_BYTE_PTR wrapped_key,
+                                                          CK_ULONG wrapped_key_len,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count,
+                                                          CK_OBJECT_HANDLE_PTR key);
+
 CK_RV        mock_C_DeriveKey                            (CK_SESSION_HANDLE session,
                                                           CK_MECHANISM_PTR mechanism,
                                                           CK_OBJECT_HANDLE base_key,
@@ -733,6 +1094,14 @@ CK_RV        mock_C_DeriveKey__invalid_handle            (CK_SESSION_HANDLE sess
                                                           CK_ULONG count,
                                                           CK_OBJECT_HANDLE_PTR key);
 
+CK_RV        mock_X_DeriveKey__invalid_handle            (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_MECHANISM_PTR mechanism,
+                                                          CK_OBJECT_HANDLE base_key,
+                                                          CK_ATTRIBUTE_PTR template,
+                                                          CK_ULONG count,
+                                                          CK_OBJECT_HANDLE_PTR key);
+
 CK_RV        mock_C_SeedRandom                           (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR seed,
                                                           CK_ULONG seed_len);
@@ -741,11 +1110,21 @@ CK_RV        mock_C_SeedRandom__invalid_handle           (CK_SESSION_HANDLE sess
                                                           CK_BYTE_PTR seed,
                                                           CK_ULONG seed_len);
 
+CK_RV        mock_X_SeedRandom__invalid_handle           (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR seed,
+                                                          CK_ULONG seed_len);
+
 CK_RV        mock_C_GenerateRandom                       (CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR random_data,
                                                           CK_ULONG random_len);
 
 CK_RV        mock_C_GenerateRandom__invalid_handle       (CK_SESSION_HANDLE session,
+                                                          CK_BYTE_PTR random_data,
+                                                          CK_ULONG random_len);
+
+CK_RV        mock_X_GenerateRandom__invalid_handle       (CK_X_FUNCTION_LIST *self,
+                                                          CK_SESSION_HANDLE session,
                                                           CK_BYTE_PTR random_data,
                                                           CK_ULONG random_len);
 
