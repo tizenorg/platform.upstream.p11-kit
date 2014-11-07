@@ -52,14 +52,18 @@ IGNORE_HFILES= \
 	conf.h \
 	debug.h \
 	dict.h \
-	mock-module.h \
+	log.h \
+	mock.h \
+	modules.h \
 	pkcs11.h \
 	pkcs11x.h \
 	private.h \
+	proxy.h \
 	util.h \
+	virtual.h \
 	array.h \
 	compat.h \
-	mock-module.h
+	$(NULL)
 
 # Images to copy into HTML directory.
 # e.g. HTML_IMAGES=$(top_srcdir)/gtk/stock-icons/stock_about_24.png
@@ -69,6 +73,7 @@ HTML_IMAGES=
 # e.g. content_files=running.sgml building.sgml changes-2.0.sgml
 content_files=p11-kit-config.xml p11-kit-sharing.xml \
 	p11-kit-devel.xml \
+	p11-kit-proxy.xml \
 	p11-kit-trust.xml \
 	p11-kit.xml \
 	pkcs11.conf.xml \

@@ -161,7 +161,7 @@ p11_mutex_init (p11_mutex_t *mutex)
 	int ret;
 
 	pthread_mutexattr_init (&attr);
-	pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_DEFAULT);
 	ret = pthread_mutex_init (mutex, &attr);
 	assert (ret == 0);
 	pthread_mutexattr_destroy (&attr);
@@ -243,6 +243,12 @@ p11_dl_error (void)
 	                (LPSTR)&msg_buf, 0, NULL);
 
 	return msg_buf;
+}
+
+void
+p11_dl_close (void *dl)
+{
+	FreeLibrary (dl);
 }
 
 int

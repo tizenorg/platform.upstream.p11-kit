@@ -5,7 +5,7 @@ SUBDIRS = . tests
 
 COMMON = $(top_srcdir)/common
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir) \
 	-I$(COMMON) \
 	-DP11_KIT_FUTURE_UNSTABLE_API \
@@ -14,6 +14,7 @@ INCLUDES = \
 incdir = $(includedir)/p11-kit-1/p11-kit
 
 inc_HEADERS = \
+	deprecated.h \
 	iter.h \
 	p11-kit.h \
 	pin.h \
@@ -24,14 +25,16 @@ MODULE_SRCS = \
 	util.c \
 	conf.c conf.h \
 	iter.c \
-	modules.c \
+	log.c log.h \
+	modules.c modules.h \
 	pkcs11.h \
 	pin.c \
 	pkcs11.h \
-	proxy.c \
+	proxy.c proxy.h \
 	private.h \
 	messages.c \
 	uri.c \
+	virtual.c virtual.h \
 	$(inc_HEADERS)
 
 lib_LTLIBRARIES = \
@@ -44,6 +47,7 @@ libp11_kit_la_CFLAGS = \
 	-DP11_USER_CONFIG_FILE=\""$(p11_user_config_file)"\" \
 	-DP11_USER_CONFIG_MODULES=\""$(p11_user_config_modules)"\" \
 	-DP11_MODULE_PATH=\""$(p11_module_path)"\" \
+	$(LIBFFI_CFLAGS) \
 	$(NULL)
 
 libp11_kit_la_LDFLAGS = \
@@ -54,9 +58,10 @@ libp11_kit_la_LDFLAGS = \
 libp11_kit_la_SOURCES = $(MODULE_SRCS)
 
 libp11_kit_la_LIBADD = \
-	$(LTLIBINTL) \
 	$(top_builddir)/common/libp11-common.la \
 	$(top_builddir)/common/libp11-library.la \
+	$(LIBFFI_LIBS) \
+	$(LTLIBINTL) \
 	$(NULL)
 
 noinst_LTLIBRARIES = \
@@ -75,6 +80,7 @@ libp11_kit_testable_la_CFLAGS = \
 	-DP11_USER_CONFIG_FILE=\""$(abs_top_srcdir)/p11-kit/tests/files/user-pkcs11.conf"\" \
 	-DP11_USER_CONFIG_MODULES=\""$(abs_top_srcdir)/p11-kit/tests/files/user-modules/win32"\" \
 	-DP11_MODULE_PATH=\""$(abs_top_builddir)/p11-kit/tests/.libs"\" \
+	$(LIBFFI_CFLAGS) \
 	$(NULL)
 
 else
@@ -86,6 +92,7 @@ libp11_kit_testable_la_CFLAGS = \
 	-DP11_USER_CONFIG_FILE=\""$(abs_top_srcdir)/p11-kit/tests/files/user-pkcs11.conf"\" \
 	-DP11_USER_CONFIG_MODULES=\""$(abs_top_srcdir)/p11-kit/tests/files/user-modules"\" \
 	-DP11_MODULE_PATH=\""$(abs_top_builddir)/p11-kit/tests/.libs"\" \
+	$(LIBFFI_CFLAGS) \
 	$(NULL)
 
 endif
@@ -98,7 +105,9 @@ example_DATA = pkcs11.conf.example
 
 EXTRA_DIST = \
 	p11-kit-1.pc.in \
-	pkcs11.conf.example.in
+	pkcs11.conf.example.in \
+	docs.h \
+	$(NULL)
 
 # Proxy module is actually same as library, so install a link
 install-exec-hook:

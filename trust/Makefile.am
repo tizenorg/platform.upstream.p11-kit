@@ -5,7 +5,7 @@ SUBDIRS = . tests
 
 COMMON = $(top_srcdir)/common
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/common \
 	-DDATADIR=\"$(datadir)\" \
@@ -55,10 +55,6 @@ libtrust_testable_la_LDFLAGS = \
 	-no-undefined
 
 libtrust_testable_la_SOURCES = $(MODULE_SRCS)
-
-externaldir = $(privatedir)
-external_SCRIPTS = \
-	p11-kit-extract-trust
 
 EXTRA_DIST = \
 	p11-kit-trust.module

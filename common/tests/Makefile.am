@@ -3,11 +3,11 @@ include $(top_srcdir)/build/Makefile.tests
 
 COMMON = $(top_srcdir)/common
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir) \
 	-I$(srcdir)/.. \
 	-I$(COMMON) \
-	$(CUTEST_CFLAGS)
+	$(TEST_CFLAGS)
 
 LDADD = \
 	$(NULL)
@@ -34,7 +34,7 @@ LDADD += \
 	$(LIBTASN1_LIBS) \
 	$(NULL)
 
-INCLUDES += \
+AM_CPPFLAGS += \
 	$(LIBTASN1_CFLAGS) \
 	$(NULL)
 
@@ -61,5 +61,6 @@ endif # WITH_ASN1
 TESTS = $(CHECK_PROGS)
 
 LDADD += \
+	$(top_builddir)/common/libp11-test.la \
 	$(top_builddir)/common/libp11-common.la \
 	$(CUTEST_LIBS)

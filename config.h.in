@@ -206,6 +206,9 @@
 /* Print debug output */
 #undef WITH_DEBUG
 
+/* Use libffi for building closures */
+#undef WITH_FFI
+
 /* More strict checks */
 #undef WITH_STRICT
 
