@@ -1,5 +1,5 @@
 Name:           p11-kit
-Version:        0.18.4
+Version:        0.19.1
 Release:        0
 License:        BSD-3-Clause
 Summary:        Library to work with PKCS#11 modules
