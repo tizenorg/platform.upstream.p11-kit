@@ -10,6 +10,7 @@ Source99:       baselibs.conf
 Source1001: 	p11-kit.manifest
 BuildRequires:  pkg-config
 BuildRequires:  pkgconfig(libtasn1)
+BuildRequires:  pkgconfig(libffi)
 
 %description
 p11-kit provides a way to load and enumerate PKCS#11 modules, as well
